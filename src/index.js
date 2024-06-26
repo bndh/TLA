@@ -1,32 +1,35 @@
 require("dotenv").config();
-const {Client, Events, GatewayIntentBits, Collection} = require("discord.js");
+const {Client, Events, GatewayIntentBits, Collection, Partials} = require("discord.js");
 const fs = require("fs");
 const path = require("path");
 const mongoose = require("mongoose");
+const Submission = require("./mongo/Submission");
 
 const getAllFilePaths = require("./utility/getAllFilePaths");
 const getLocalCommands = require("./utility/getLocalCommands");
 
-const client = new Client({
+client = new Client({
 	intents: [
 		GatewayIntentBits.Guilds,
+		GatewayIntentBits.GuildMessageReactions,
 		GatewayIntentBits.GuildMembers,
 		GatewayIntentBits.GuildMessages,
 		GatewayIntentBits.MessageContent
+	],
+	partials: [
+		Partials.Channel, // Required to listen for uncached things
+		Partials.Message,
+		Partials.Reaction
 	]
 });
 
 (async () => {
-	await connectToDatabase();
+	await mongoose.connect(process.env.MONGODB_URI); // Mongoose queues its requests so we do not have to wait for the connection to be made
 	loadCommands();
 	registerListeners();
-	client.login(process.env.TOKEN);
+	await client.login(process.env.TOKEN);
+	checkChannels();
 })();
-
-async function connectToDatabase() {
-	await mongoose.connect(process.env.MONGODB_URI);
-	console.log("Connected to Database.");
-}
 
 function loadCommands() {
 	client.commands = new Collection(); // Attach a commands property to our client which is accessible in other files
@@ -48,5 +51,16 @@ function registerListeners() {
 		} else {
 			client.on(event.name, (...args) => event.execute(...args));
 		}
+		console.info(`Registered: ${event.name}`);
 	}
+}
+
+async function checkChannels() {
+	checkChannel(process.env.SUBMISSIONS_INTAKE_ID, "Intake");
+	checkChannel(process.env.SUBMISSIONS_FORUM_ID, "Submissions");
+	checkChannel(process.env.VETO_FORUM_ID, "Veto");
+}
+
+async function checkChannel(channelId, channelName) {
+	client.channels.fetch(channelId).catch(() => console.error(`Channel "${channelName}" ("${channelId}") not found! \nIt is strongly advised to set this .env value and restart.`));
 }

@@ -1,0 +1,1 @@
+module.exports = /(?:https?|ftp)\:\/\/\w*\.(\w+)\.\w+\/([\w.,@?^=%&:\/~+#-]*[\w@?^=%&\/~+#-])?/g; // Made epically by me
