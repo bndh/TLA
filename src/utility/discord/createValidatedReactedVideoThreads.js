@@ -1,7 +1,7 @@
-
 const Submission = require("../../mongo/Submission");
 const createThreadAndReact = require("./createThreadAndReact");
 const getTagByEmojiCode = require("./getTagByEmojiCode");
+const Judge = require("../../mongo/Judge");
 
 module.exports = async (videoLinks, forum) => {
 	for(const videoLink of videoLinks) {
@@ -10,6 +10,8 @@ module.exports = async (videoLinks, forum) => {
 	
 		const waitingTag = getTagByEmojiCode(forum.availableTags, "⚖️");
 		const thread = await createThreadAndReact(forum, {message: videoLink, appliedTags: [waitingTag.id]});
-		await Submission.create({threadId: thread.id, videoLink: videoLink}); // Must await to ensure that the entry is added to the database
+
+		Submission.enqueue(() => Submission.create({threadId: thread.id, videoLink: videoLink})); // Must await to ensure that the entry is added to the database
+		Judge.enqueue(() => Judge.updateMany({}, {$push: {unjudgedThreadIds: thread.id}}));
 	}
 }

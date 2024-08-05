@@ -1,11 +1,6 @@
 require("dotenv").config();
-const {Events, ForumChannel} = require("discord.js");
-
-const addReactions = require("../utility/discord/addReactions");
-const createThreadAndReact = require("../utility/discord/createThreadAndReact");
+const {Events} = require("discord.js");
 const getVideosFromMessage = require("../utility/discord/getVideosFromMessage");
-const { create } = require("../mongo/Submission");
-const createReactedThreadsFromVideos = require("../utility/discord/createReactedThreadsFromVideos");
 const createValidatedReactedVideoThreads = require("../utility/discord/createValidatedReactedVideoThreads");
 
 module.exports = {
@@ -16,10 +11,10 @@ module.exports = {
 	}
 };
 
-function handleMessage(message) {
+async function handleMessage(message) {
 	if(message.author.bot) return;
 	if(message.channelId !== process.env.SUBMISSIONS_INTAKE_ID) return;
-
-	message.client.channels.fetch(process.env.SUBMISSIONS_FORUM_ID)
-		.then(submissionsForum => createValidatedReactedVideoThreads(getVideosFromMessage(message), submissionsForum));
+	
+	const submissionsForum = await message.client.channels.fetch(process.env.SUBMISSIONS_FORUM_ID);
+	createValidatedReactedVideoThreads(getVideosFromMessage(message), submissionsForum);
 }

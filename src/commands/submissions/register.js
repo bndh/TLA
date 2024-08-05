@@ -1,63 +1,55 @@
+require("dotenv").config();
 const {SlashCommandBuilder, PermissionFlagsBits} = require("discord.js");
-const LayoutAdmin = require("../../mongo/layoutAdmin");
-const layoutNominator = require("../../mongo/layoutNominator");
+const tallyUserThreadReactions = require("../../utility/discord/tallyUserThreadReactions");
+const Judge = require("../../mongo/Judge");
 
 module.exports = {
 	data: new SlashCommandBuilder()
 		.setName("register")
 		.setDescription("Manually register a user in the judge database.")
-		.addUserOption(optionBuilder =>
+		.addUserOption(optionBuilder => 
 			optionBuilder.setName("user")
 				.setDescription("The user to be registered.")
 				.setRequired(true)
 		)
-		.addStringOption(optionBuilder =>
+		.addStringOption(optionBuilder => 
 			optionBuilder.setName("role")
 				.setDescription("The role that the user will have in the judging system.")
 				.setRequired(true)
 				.addChoices(
-					{name: "LN", value: "layoutNominator"},
-					{name: "Admin", value: "layoutAdmin"}
+					{name: "LN", value: "nominator"},
+					{name: "Admin", value: "admin"}
 				)
 		)
 		.setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 	async execute(interaction) {
+		const deferPromise = interaction.deferReply({ephemeral: true});
+
 		const user = interaction.options.getUser("user", true);
 		const userType = interaction.options.getString("role", true);
-		if(userType === "admin") handleNewAdmin(interaction.client, user.id);
-		else handleNewNominator(interaction.client, user.id);
+
+		const forumIds = [process.env.VETO_FORUM_ID];
+		if(userType === "admin") forumIds.push(process.env.SUBMISSIONS_FORUM_ID);
+
+		const tallyPromises = [];
+		for(const forumId of forumIds) {
+			tallyPromises.push(await fetchAndTallyUnreactedThreadIds(client, forumId, user.id));
+		}
+		const threadIds = (await Promise.all(tallyPromises)).flat();
+
+		await Judge.enqueue(() => Judge.create({
+			userId: user.id,
+			judgeType: userType,
+			unjudgedThreadIds: threadIds
+		}));
+
+		await deferPromise;
+		interaction.editReply(`Successfully registered \`${user.id}\` with \`${threadIds.length}\` remaining threads tallied.`);
 	}
-}
+};
 
-async function handleNewAdmin(client, userId) {
-	const admin = new LayoutAdmin({userId: userId, unjudgedLayoutSubmissionIds: []});
-	await admin.save();
-}
-
-async function handleNewNominator(client, userId) {
-	const nominator = new layoutNominator({userId: userId, unjudgedLayoutVetoIds: []});
-	await nominator.save();
-}
-
-async function checkUserThreads(targetForum, userId) {
-	const threadIds = [];
-	
-	const fetchedActiveThreads = await targetForum.threads.fetchActive();
-	fetchedActiveThreads.threads.each(async thread => {
-		const reacted = await hasReacted(thread, userId);
-		if(reacted) threadIds.push(thread.id);
-	});
-	const fetchedArchivedThreads = await targetForum.threads.fetchArchived();
-	fetchedArchivedThreads.threads.each(async thread => {
-		const reacted = await hasReacted(thread, userId);
-		if(reacted) threadIds.push(thread.id);
-	});
-}
-
-async function hasReacted(thread, userId) {
-	const starterMessage = await thread.fetchStarterMessage();
-	const users = starterMessage.reactions.resolve("✅").users;
-	const fetchedUsers = await users.fetch({after: userId});
-	const hasReacted = fetchedUsers.findKey(reactionUserId => reactionUserId === userId);
-	return hasReacted;
+async function fetchAndTallyUnreactedThreadIds(client, forumId, userId) {
+	const forum = await client.channels.fetch(forumId);
+	const threads = await tallyUserThreadReactions(forum, userId, ...["✅", "⛔"], false);
+	return threads.map(thread => thread.id);
 }

@@ -1,12 +1,14 @@
 require("dotenv").config();
-const {Client, Events, GatewayIntentBits, Collection, Partials} = require("discord.js");
+const {Client, GatewayIntentBits, Collection, Partials, time, TimestampStyles} = require("discord.js");
 const fs = require("fs");
 const path = require("path");
 const mongoose = require("mongoose");
-const Submission = require("./mongo/Submission");
-
 const getAllFilePaths = require("./utility/getAllFilePaths");
 const getLocalCommands = require("./utility/getLocalCommands");
+const Submission = require("./mongo/Submission");
+const handleVetoJudgement = require("./utility/discord/handleVetoJudgement");
+
+const Judge = require("./mongo/Judge");
 
 client = new Client({
 	intents: [
@@ -24,11 +26,13 @@ client = new Client({
 });
 
 (async () => {
-	await mongoose.connect(process.env.MONGODB_URI); // Mongoose queues its requests so we do not have to wait for the connection to be made
+	await mongoose.connect(process.env.MONGODB_URI); // Mongoose queues its requests so we do not have to wait for the connection to be made	
+	console.log("Connected to Mongoose");
 	loadCommands();
 	registerListeners();
 	await client.login(process.env.TOKEN);
-	checkChannels();
+	await checkChannels();
+	startPendingCountdowns();
 })();
 
 function loadCommands() {
@@ -63,4 +67,15 @@ async function checkChannels() {
 
 async function checkChannel(channelId, channelName) {
 	client.channels.fetch(channelId).catch(() => console.error(`Channel "${channelName}" ("${channelId}") not found! \nIt is strongly advised to set this .env value and restart.`));
+}
+
+async function startPendingCountdowns() {
+	const pendingThreads = await Submission.enqueue(() => Submission.find({expirationTime: {$gte: 0}})); // Slightly hacky way of making this work
+	for(const pendingThread of pendingThreads) {
+		setTimeout(
+			() => handleVetoJudgement(client, pendingThread.threadId),
+			pendingThread.expirationTime - Date.now().valueOf()
+		);
+		console.log(`Set Timeout for ${pendingThread.threadId} in ${pendingThread.expirationTime - Date.now().valueOf()}ms`);
+	}
 }

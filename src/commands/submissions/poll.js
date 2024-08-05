@@ -2,9 +2,6 @@ require("dotenv").config();
 const {SlashCommandBuilder, PermissionFlagsBits} = require("discord.js");
 const {Worker} = require("worker_threads");
 const path = require("path");
-const Submission = require("../../mongo/Submission");
-const createThreadAndReact = require("../../utility/discord/createThreadAndReact");
-const getTagByEmojiCode = require("../../utility/discord/getTagByEmojiCode");
 const fetchMessages = require("../../utility/discord/fetchMessages");
 const createValidatedReactedVideoThreads = require("../../utility/discord/createValidatedReactedVideoThreads");
 
@@ -12,11 +9,12 @@ module.exports = {
 	data: new SlashCommandBuilder()
 		.setName("poll")
 		.setDescription("Takes every link from #submissions-intake and reposts it in the submissions forum.")
-		.addIntegerOption(optionBuilder =>
+		.addIntegerOption(optionBuilder => 
 			optionBuilder.setName("max-poll")
 				.setDescription("The maximum number of messages to be scanned from #submissions-intake.")
 				.setMinValue(1)
-				.setRequired(true))
+				.setRequired(true)
+		)
 		.setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 	async execute(interaction) {
 		await interaction.deferReply({ephemeral: true});
