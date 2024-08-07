@@ -9,8 +9,12 @@ const submissionSchema = new mongoose.Schema({
 	},
 	videoLink: {
 		type: String,
+		required: true
+	},
+	status: { // AWAITING DECISION -> DENIED / AWAITING VETO . PENDING APPROVAL -> VETOED / APPROVED
+		type: String,
 		required: true,
-		lowercase: true
+		uppercase: true
 	},
 	expirationTime: {
 		type: Number,

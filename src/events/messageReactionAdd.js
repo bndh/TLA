@@ -1,12 +1,12 @@
 require("dotenv").config();
 const {Events, time, TimestampStyles} = require("discord.js");
-const getTagByEmojiCode = require("../utility/discord/getTagByEmojiCode");
-const createThreadAndReact = require("../utility/discord/createThreadAndReact");
-const getVideosFromMessage = require("../utility/discord/getVideosFromMessage");
-const createReactedThreadsFromVideos = require("../utility/discord/createReactedThreadsFromVideos");
 const Judge = require("../mongo/Judge");
 const Submission = require("../mongo/Submission");
-const handleVetoJudgement = require("../utility/discord/handleVetoJudgement");
+const getTagByEmojiCode = require("../utility/discord/threads/getTagByEmojiCode");
+const handleSubmissionDeny = require("../utility/discord/submissionsVeto/handleSubmissionDeny");
+const handleSubmissionApprove = require("../utility/discord/submissionsVeto/handleSubmissionApprove");
+const handleVetoJudgement = require("../utility/discord/submissionsVeto/handleVetoJudgement");
+const handleVetoPending = require("../utility/discord/submissionsVeto/handleVetoPending");
 
 module.exports = {
 	name: Events.MessageReactionAdd,
@@ -32,22 +32,7 @@ async function handleSubmissionResponse(messageReaction, reactionChannel) {
 	const tags = reactionChannel.parent.availableTags;
 
 	if(messageReaction.emoji.name === "⛔") handleSubmissionDeny(reactionChannel, tags);
-	else if(messageReaction.emoji.name === "✅") await handleSubmissionApprove(reactionChannel, tags, messageReaction);
-}
-
-function handleSubmissionDeny(reactionChannel, tags) {
-	const deniedTag = getTagByEmojiCode(tags, "⛔");
-	reactionChannel.setAppliedTags([deniedTag.id]);
-}
-
-async function handleSubmissionApprove(reactionChannel, tags, messageReaction) {
-	const vetoForum = await messageReaction.client.channels.fetch(process.env.VETO_FORUM_ID);
-	const newThread = (await createReactedThreadsFromVideos(getVideosFromMessage(messageReaction.message), vetoForum))[0];
-
-	Submission.enqueue(() => Submission.updateOne({threadId: reactionChannel.id}, {threadId: newThread.id}));
-
-	const approvedTag = getTagByEmojiCode(tags, "✅");
-	reactionChannel.setAppliedTags([approvedTag.id]);
+	else if(messageReaction.emoji.name === "✅") await handleSubmissionApprove(reactionChannel, tags, messageReaction.message);
 }
 
 function handleVetoResponse(messageReaction, reactionChannel) {
@@ -61,7 +46,7 @@ function handleVetoResponse(messageReaction, reactionChannel) {
 		getTagByEmojiCode(tags, "✅").id,
 		getTagByEmojiCode(tags, "⛔").id
 	];
-	if(reactionChannel.appliedTags.some(appliedTag => targetTagIds.includes(appliedTag))) return; // We know that pending threads only change after a set amount of time, not after a certain nujmber of emojis
+	if(reactionChannel.appliedTags.some(appliedTag => targetTagIds.includes(appliedTag))) return; // We know that pending threads only change after a set amount of time, not after a certain number of emojis
 
 	let count = 0;
 	count += messageReaction.count;
@@ -73,18 +58,5 @@ function handleVetoResponse(messageReaction, reactionChannel) {
 		if(count < +process.env.VETO_THRESHOLD + 2) return;
 	}
 	
-	handleVetoPending(reactionChannel, pendingTagId, messageReaction);
+	handleVetoPending(reactionChannel, pendingTagId, messageReaction.message);
 }
-
-async function handleVetoPending(reactionChannel, pendingTagId, messageReaction) {
-	const expirationTime = new Date().valueOf() + (+process.env.PENDING_DURATION);
-	Submission.enqueue(() => Submission.updateOne({threadId: reactionChannel.id}, {expirationTime: expirationTime}));
-	
-	reactionChannel.setAppliedTags([pendingTagId]);
-	
-	const expirationDate = new Date(expirationTime); // 1 week in the future
-	messageReaction.message.edit(`‼️ **Last Chance!** Pending Status expires ${time(expirationDate, TimestampStyles.RelativeTime)}\n\n${messageReaction.message.content}...`);
-
-	setTimeout(() => handleVetoJudgement(messageReaction.client, reactionChannel.id), +process.env.PENDING_DURATION);
-}
-

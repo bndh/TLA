@@ -1,7 +1,7 @@
 require("dotenv").config();
 const {SlashCommandBuilder, PermissionFlagsBits} = require("discord.js");
-const tallyUserThreadReactions = require("../../utility/discord/tallyUserThreadReactions");
 const Judge = require("../../mongo/Judge");
+const tallyUserThreadReactions = require("../../utility/discord/reactions/tallyUserThreadReactions");
 
 module.exports = {
 	data: new SlashCommandBuilder()

@@ -1,7 +1,7 @@
 require("dotenv").config();
 const {Events} = require("discord.js");
-const getVideosFromMessage = require("../utility/discord/getVideosFromMessage");
-const createValidatedReactedVideoThreads = require("../utility/discord/createValidatedReactedVideoThreads");
+const getVideosFromMessage = require("../utility/discord/messages/getVideosFromMessage");
+const createValidatedReactedVideoThreads = require("../utility/discord/threads/createValidatedReactedVideoThreads");
 
 module.exports = {
 	name: Events.MessageCreate,

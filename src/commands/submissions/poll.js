@@ -2,8 +2,8 @@ require("dotenv").config();
 const {SlashCommandBuilder, PermissionFlagsBits} = require("discord.js");
 const {Worker} = require("worker_threads");
 const path = require("path");
-const fetchMessages = require("../../utility/discord/fetchMessages");
-const createValidatedReactedVideoThreads = require("../../utility/discord/createValidatedReactedVideoThreads");
+const fetchMessages = require("../../utility/discord/messages/fetchMessages");
+const createValidatedReactedVideoThreads = require("../../utility/discord/threads/createValidatedReactedVideoThreads");
 
 module.exports = {
 	data: new SlashCommandBuilder()

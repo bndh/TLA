@@ -20,7 +20,7 @@ const rest = new REST().setToken(process.env.TOKEN);
 			Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID), // Change to Routes.applicationCommands(process.env.CLIEND_ID) for global commands
 			{body: commands}
 		);
-		console.log(`Successfully reloaded ${data.length} application (/) commands.`);
+		console.log(`Successfully refreshed ${data.length} application (/) commands.`);
 	} catch(error) {
 		console.error(error);
 	}

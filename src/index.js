@@ -6,9 +6,8 @@ const mongoose = require("mongoose");
 const getAllFilePaths = require("./utility/getAllFilePaths");
 const getLocalCommands = require("./utility/getLocalCommands");
 const Submission = require("./mongo/Submission");
-const handleVetoJudgement = require("./utility/discord/handleVetoJudgement");
-
 const Judge = require("./mongo/Judge");
+const handleVetoJudgement = require("./utility/discord/submissionsVeto/handleVetoJudgement");
 
 client = new Client({
 	intents: [
@@ -26,8 +25,7 @@ client = new Client({
 });
 
 (async () => {
-	await mongoose.connect(process.env.MONGODB_URI); // Mongoose queues its requests so we do not have to wait for the connection to be made	
-	console.log("Connected to Mongoose");
+	mongoose.connect(process.env.MONGODB_URI).then(v => console.log("Connected to Mongoose!")); // Mongoose queues its requests so we do not have to wait for the connection to be made	
 	loadCommands();
 	registerListeners();
 	await client.login(process.env.TOKEN);

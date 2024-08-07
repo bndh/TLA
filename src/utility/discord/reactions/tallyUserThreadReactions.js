@@ -1,5 +1,5 @@
 const hasReacted = require("./hasReacted");
-const getAllThreads = require("./getAllThreads");
+const getAllThreads = require("../threads/getAllThreads");
 
 module.exports = async (forum, userId, reactions, checkForReactionAbsence = false) => {
 	const threads = await getAllThreads(forum); // Combine into one array

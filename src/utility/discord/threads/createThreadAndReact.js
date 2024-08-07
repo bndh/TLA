@@ -1,4 +1,4 @@
-const addReactions = require("./addReactions");
+const addReactions = require("../reactions/addReactions");
 
 module.exports = async (forumChannel, guildForumThreadCreateOptions) => {
 	guildForumThreadCreateOptions.name = "New Submission!";
