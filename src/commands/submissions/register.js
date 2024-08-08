@@ -2,6 +2,7 @@ require("dotenv").config();
 const {SlashCommandBuilder, PermissionFlagsBits} = require("discord.js");
 const Judge = require("../../mongo/Judge");
 const tallyUserThreadReactions = require("../../utility/discord/reactions/tallyUserThreadReactions");
+const getTagByEmojiCode = require("../../utility/discord/threads/getTagByEmojiCode");
 
 module.exports = {
 	data: new SlashCommandBuilder()
@@ -57,6 +58,10 @@ module.exports = {
 
 async function fetchAndTallyUnreactedThreadIds(client, forumId, userId) {
 	const forum = await client.channels.fetch(forumId);
-	const threads = await tallyUserThreadReactions(forum, userId, ["✅", "⛔"], true);
+	const undesiredTagIds = [
+		getTagByEmojiCode(forum.availableTags, "✅").id,
+		getTagByEmojiCode(forum.availableTags, "⛔").id
+	];
+	const threads = await tallyUserThreadReactions(forum, userId, ["✅", "⛔"], true, undesiredTagIds);
 	return threads.map(thread => thread.id);
 }

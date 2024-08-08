@@ -207,7 +207,7 @@ async function updateJudges(judgeType, forums) {
 			if(!fetchedThread) continue;
 			if(fetchedThread.appliedTags.some((appliedTag => judgedTagIds.includes(appliedTag)))) continue;
 
-			const starterMessage = await fetchedThread.fetchStarterMessage({cache: false});
+			const starterMessage = await fetchedThread.fetchStarterMessage({cache: false, force: true}); // Reactions may not be cached so we force
 			const reactedUserIds = await getReactedUsers(starterMessage, judgementEmojis);
 
 			for(const judgeId of judgeMap.keys()) {

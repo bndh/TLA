@@ -10,7 +10,7 @@ const getVideosFromMessage = require("../messages/getVideosFromMessage");
 
 module.exports = async (client, submissionChannelId) => { // Use ids as it may be a long time before we run this function
 	const submissionChannel = await client.channels.fetch(submissionChannelId);
-	const submissionMessage = await submissionChannel.fetchStarterMessage({force: true});
+	const submissionMessage = await submissionChannel.fetchStarterMessage({force: true}); // Otherwise reaction cache may be incorrect
 	if(submissionChannel.archived) await submissionChannel.setArchived(false);
 
 	const counts = [];

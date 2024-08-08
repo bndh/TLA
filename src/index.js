@@ -27,7 +27,7 @@ client = new Client({
 (async () => {
 	await mongoose.connect(process.env.MONGODB_URI);
 	console.log("Connected to Mongoose!");
-	// await Submission.enqueue(() => Submission.deleteMany({}));
+
 	loadCommands();
 	registerListeners();
 	await client.login(process.env.TOKEN);
