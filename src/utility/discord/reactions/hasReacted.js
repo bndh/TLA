@@ -1,12 +1,11 @@
-module.exports = async (message, userId, reactionCodes) => { // reactionCodes should be in ...[] format
+module.exports = async (message, userId, reactionCodes) => {
 	let foundUserReaction = false;
 
 	for(const reactionCode of reactionCodes) {
 		const reaction = message.reactions.resolve(reactionCode);
 		if(!reaction) continue;
 
-		const unfetchedUsers = reaction.users;
-		const fetchedUsers = await unfetchedUsers.fetch();
+		const fetchedUsers = await reaction.users.fetch();
 		if(fetchedUsers.hasAny(...[userId])) {
 			foundUserReaction = true;
 			break;

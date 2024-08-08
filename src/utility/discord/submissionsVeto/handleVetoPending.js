@@ -1,5 +1,7 @@
 const {time, TimestampStyles} = require("discord.js");
+
 const Submission = require("../../../mongo/Submission");
+
 const handleVetoJudgement = require("./handleVetoJudgement");
 
 module.exports = async (channel, pendingTagId, message) => {

@@ -37,19 +37,26 @@ module.exports = {
 		}
 		const threadIds = (await Promise.all(tallyPromises)).flat();
 
-		await Judge.enqueue(() => Judge.create({
-			userId: user.id,
-			judgeType: userType,
-			unjudgedThreadIds: threadIds
-		}));
+		const entry = await Judge.enqueue(() => Judge.findOne({userId: user.id}));
+		if(!entry) {
+			await Judge.enqueue(() => Judge.create({
+				userId: user.id,
+				judgeType: userType,
+				unjudgedThreadIds: threadIds
+			}));
+		} else {
+			entry.judgeType = userType;
+			entry.unjudgedThreadIds = threadIds;
+			await Judge.enqueue(() => entry.save());
+		}
 
 		await deferPromise;
-		interaction.editReply(`Successfully registered \`${user.id}\` with \`${threadIds.length}\` remaining threads tallied.`);
+		interaction.editReply(`Successfully registered \`${user.id}\` with \`${threadIds.length}\` submissions left to judge.`);
 	}
 };
 
 async function fetchAndTallyUnreactedThreadIds(client, forumId, userId) {
 	const forum = await client.channels.fetch(forumId);
-	const threads = await tallyUserThreadReactions(forum, userId, ...["✅", "⛔"], false);
+	const threads = await tallyUserThreadReactions(forum, userId, ["✅", "⛔"], true);
 	return threads.map(thread => thread.id);
 }

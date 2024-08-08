@@ -1,12 +1,12 @@
 require("dotenv").config();
-const {Client, GatewayIntentBits, Collection, Partials, time, TimestampStyles} = require("discord.js");
-const fs = require("fs");
+const {Client, GatewayIntentBits, Collection, Partials} = require("discord.js");
 const path = require("path");
 const mongoose = require("mongoose");
+
+const Submission = require("./mongo/Submission");
+
 const getAllFilePaths = require("./utility/getAllFilePaths");
 const getLocalCommands = require("./utility/getLocalCommands");
-const Submission = require("./mongo/Submission");
-const Judge = require("./mongo/Judge");
 const handleVetoJudgement = require("./utility/discord/submissionsVeto/handleVetoJudgement");
 
 client = new Client({
@@ -25,7 +25,9 @@ client = new Client({
 });
 
 (async () => {
-	mongoose.connect(process.env.MONGODB_URI).then(v => console.log("Connected to Mongoose!")); // Mongoose queues its requests so we do not have to wait for the connection to be made	
+	await mongoose.connect(process.env.MONGODB_URI);
+	console.log("Connected to Mongoose!");
+	// await Submission.enqueue(() => Submission.deleteMany({}));
 	loadCommands();
 	registerListeners();
 	await client.login(process.env.TOKEN);

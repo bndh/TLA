@@ -1,9 +1,10 @@
 require("dotenv").config();
 const { SlashCommandBuilder, PermissionFlagsBits } = require("discord.js");
+
 const Judge = require("../../mongo/Judge");
 const Submission = require("../../mongo/Submission");
+
 const getAllThreads = require("../../utility/discord/threads/getAllThreads");
-const hasReacted = require("../../utility/discord/reactions/hasReacted");
 const getReactedUsers = require("../../utility/discord/reactions/getReactedUsers");
 const getTagByEmojiCode = require("../../utility/discord/threads/getTagByEmojiCode");
 const fetchMessages = require("../../utility/discord/messages/fetchMessages");
@@ -38,7 +39,6 @@ module.exports = {
 		
 		const mode = interaction.options.getString("mode", true);
 		
-		let processPromises;
 		let promisedChannels;
 		const channelManager = interaction.client.channels;
 		switch(mode) {
@@ -47,13 +47,13 @@ module.exports = {
 					channelManager.fetch(process.env.SUBMISSIONS_FORUM_ID), 
 					channelManager.fetch(process.env.VETO_FORUM_ID)
 				]);
-				await handleJudgeSync(interaction, promisedChannels[0], promisedChannels[1]); 
+				await handleJudgeSync(promisedChannels[0], promisedChannels[1]); 
 				break;
 			case("intake"):
 				promisedChannels = await Promise.all([
 					channelManager.fetch(process.env.SUBMISSIONS_INTAKE_ID), 
 					channelManager.fetch(process.env.SUBMISSIONS_FORUM_ID)]);
-				await handleIntakeSync(interaction, promisedChannels[0], promisedChannels[1]); 
+				await handleIntakeSync(promisedChannels[0], promisedChannels[1]); 
 				break;
 			case("forums"):
 				promisedChannels = await Promise.all([
@@ -66,10 +66,10 @@ module.exports = {
 				promisedChannels = await Promise.all([
 					channelManager.fetch(process.env.SUBMISSIONS_INTAKE_ID),
 					channelManager.fetch(process.env.SUBMISSIONS_FORUM_ID), 
-					channelManager.fetch(process.env.SUBMISSIONS_FORUM_ID)
+					channelManager.fetch(process.env.VETO_FORUM_ID) // TODO BETTER CODE STRUCTURE WOULD BE PASS HTE PROMISES TO THE METHODS AND HAVE THEM AWAIT THEM INTERNALLY?
 				]);
+				await handleForumsSync(promisedChannels[1], promisedChannels[2]); // Intake happens after forum sync as it checks the DB before posting, which might not be ready if done in another order
 				await handleIntakeSync(promisedChannels[0], promisedChannels[1]);
-				await handleForumsSync(promisedChannels[1], processPromises[2]);
 				await handleJudgeSync(promisedChannels[1], promisedChannels[2]);
 		}
 
@@ -77,23 +77,6 @@ module.exports = {
 		interaction.editReply("Sync complete!");
 	}
 };
-
-async function handleIntakeSync(intakeChannel, submissionsForum) {
-	const initialMessages = await fetchMessages(intakeChannel, process.env.INTAKE_SYNC_MAX);
-	for(const initialMessage of initialMessages) {
-		const message = await intakeChannel.messages.fetch(initialMessage.id);
-
-		const videoLinks = getVideosFromMessage(message);
-		for(const videoLink of videoLinks) {
-			const alreadyExists = await Submission.exists({videoLink: videoLink});
-			if(alreadyExists) continue;
-
-			const thread = (await createReactedThreadsFromVideos([videoLink], submissionsForum))[0];
-			Submission.enqueue(() => Submission.create({threadId: thread.id, videoLink: videoLink, status: "AWAITING DECISION"}));
-			Judge.enqueue(() => Judge.updateMany({}, {$push: {unjudgedThreadIds: thread.id}}));
-		}
-	}
-}
 
 async function handleForumsSync(submissionsForum, vetoForum) {
 	const vetoThreadPromise = getAllThreads(vetoForum);
@@ -132,7 +115,6 @@ async function handleForumsSync(submissionsForum, vetoForum) {
 		if(appliedTag.name === "Awaiting Veto") { // We only care about Awaiting Veto because Approved/Denied have completed their lifecycle, and Pending Approval should be handled on bot launch
 			const reactionCounts = await tallyReactions(starterMessage, [judgementEmojis[0], judgementEmojis[1]]);
 			if(reactionCounts[0] + reactionCounts[1] >= +process.env.VETO_THRESHOLD + 2) {
-				console.log(`Veto Pending ${fetchedThread.id}`)
 				handleVetoPending(fetchedThread, pendingTag.id, starterMessage);
 			}
 		} else {
@@ -160,11 +142,13 @@ async function handleForumsSync(submissionsForum, vetoForum) {
 
 		let entry = await entryPromise;
 		if(!entry) {
-			entry = await Submission.create({
-				threadId: fetchedThread.id, 
-				videoLink: videoLink,
-				status: "AWAITING VETO"
-			});
+			entry = await Submission.enqueue(() => Submission.findOne({videoLink: videoLink}));
+			if(entry) continue; // Indicates that the entry is already in the veto stage, which will have been synced by this point
+			else entry = await Submission.create({
+					threadId: fetchedThread.id, 
+					videoLink: videoLink,
+					status: "AWAITING DECISION"
+				});
 		}
 
 		const appliedTag = tagMap.get(fetchedThread.appliedTags[0]);
@@ -172,9 +156,26 @@ async function handleForumsSync(submissionsForum, vetoForum) {
 			const reactionCounts = await tallyReactions(starterMessage, [judgementEmojis[0], judgementEmojis[1]]);
 			if(reactionCounts[0] > reactionCounts[1]) {
 				await handleSubmissionApprove(fetchedThread, submissionsForum.availableTags, starterMessage);
-			} else {
+			} else if(reactionCounts[0] < reactionCounts[1]) {
 				handleSubmissionDeny(fetchedThread, submissionsForum.availableTags);
 			}
+		}
+	}
+}
+
+async function handleIntakeSync(intakeChannel, submissionsForum) {
+	const initialMessages = await fetchMessages(intakeChannel, process.env.INTAKE_SYNC_MAX);
+	for(const initialMessage of initialMessages) {
+		const message = await intakeChannel.messages.fetch(initialMessage.id);
+
+		const videoLinks = getVideosFromMessage(message);
+		for(const videoLink of videoLinks) {
+			const alreadyExists = await Submission.exists({videoLink: videoLink});
+			if(alreadyExists) continue;
+
+			const thread = (await createReactedThreadsFromVideos([videoLink], submissionsForum))[0];
+			Submission.enqueue(() => Submission.create({threadId: thread.id, videoLink: videoLink, status: "AWAITING DECISION"}));
+			Judge.enqueue(() => Judge.updateMany({}, {$push: {unjudgedThreadIds: thread.id}}));
 		}
 	}
 }
@@ -207,12 +208,11 @@ async function updateJudges(judgeType, forums) {
 			if(fetchedThread.appliedTags.some((appliedTag => judgedTagIds.includes(appliedTag)))) continue;
 
 			const starterMessage = await fetchedThread.fetchStarterMessage({cache: false});
-			const reactedUserIds = await getReactedUsers(starterMessage, ...judgementEmojis);
+			const reactedUserIds = await getReactedUsers(starterMessage, judgementEmojis);
 
 			for(const judgeId of judgeMap.keys()) {
 				if(reactedUserIds.includes(judgeId)) continue;
-				judgeMap.get(judgeId).push(fetchedThread.id);
-				
+				judgeMap.get(judgeId).push(fetchedThread.id);	
 			}
 		}
 	}

@@ -16,5 +16,5 @@ async function handleMessage(message) {
 	if(message.channelId !== process.env.SUBMISSIONS_INTAKE_ID) return;
 	
 	const submissionsForum = await message.client.channels.fetch(process.env.SUBMISSIONS_FORUM_ID);
-	createValidatedReactedVideoThreads(getVideosFromMessage(message), submissionsForum);
+	createValidatedReactedVideoThreads(getVideosFromMessage(message), submissionsForum, ["admin"]);
 }

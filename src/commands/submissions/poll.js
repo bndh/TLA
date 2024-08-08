@@ -48,7 +48,7 @@ module.exports = {
 		})
 		await Promise.all(processedLinkPromises); // Indicates videoLinks is ready	
 
-		createValidatedReactedVideoThreads(videoLinks, channels[1]);
+		createValidatedReactedVideoThreads(videoLinks, channels[1], ["admin"]);
 
 		interaction.editReply(`Processed ${messages.length} messages.`);
 	}

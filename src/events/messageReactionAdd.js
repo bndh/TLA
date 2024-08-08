@@ -1,11 +1,9 @@
 require("dotenv").config();
-const {Events, time, TimestampStyles} = require("discord.js");
+const {Events} = require("discord.js");
 const Judge = require("../mongo/Judge");
-const Submission = require("../mongo/Submission");
 const getTagByEmojiCode = require("../utility/discord/threads/getTagByEmojiCode");
 const handleSubmissionDeny = require("../utility/discord/submissionsVeto/handleSubmissionDeny");
 const handleSubmissionApprove = require("../utility/discord/submissionsVeto/handleSubmissionApprove");
-const handleVetoJudgement = require("../utility/discord/submissionsVeto/handleVetoJudgement");
 const handleVetoPending = require("../utility/discord/submissionsVeto/handleVetoPending");
 
 module.exports = {
