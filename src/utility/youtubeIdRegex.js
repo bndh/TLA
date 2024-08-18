@@ -1,0 +1,1 @@
+module.exports = /(?:https?)\:\/\/(?:www.)?youtu(?:.be|be.com)\/(?:watch\?v=)?([\w]+)(?:[\w@?^=%&\/~+#-])*/; // Capturing group 1 is the id. No global flag to allow to match capturing groups

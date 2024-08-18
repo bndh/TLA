@@ -14,6 +14,7 @@ const handleSubmissionApprove = require("../../utility/discord/submissionsVeto/h
 const handleSubmissionDeny = require("../../utility/discord/submissionsVeto/handleSubmissionDeny");
 const tallyReactions = require("../../utility/discord/reactions/tallyReactions");
 const handleVetoPending = require("../../utility/discord/submissionsVeto/handleVetoPending");
+const submissionLinkExists = require("../../utility/submissionLinkExists");
 
 const judgementEmojis = process.env.JUDGEMENT_EMOJIS.split(", ");
 const waitingEmojis = process.env.WAITING_EMOJIS.split(", ");
@@ -22,23 +23,30 @@ module.exports = {
 	data: new SlashCommandBuilder()
 		.setName("sync")
 		.setDescription("Sync the bot up with the current server state.")
-		.addStringOption(optionBuilder => 
-			optionBuilder.setName("mode")
-				.setDescription("Which parts of the server should be synced.")
-				.setRequired(true)
-				.addChoices(
-					{name: "Intake", value: "intake"},
-					{name: "Forums", value: "forums"},
-					{name: "Judges", value: "judges"},
-					{name: "All", value: "all"}
-				)
+		.addStringOption(optionBuilder => optionBuilder
+			.setName("mode")
+			.setDescription("Which parts of the server should be synced.")
+			.setRequired(true)
+			.addChoices(
+				{name: "Intake", value: "intake"},
+				{name: "Forums", value: "forums"},
+				{name: "Judges", value: "judges"},
+				{name: "All", value: "all"}
+			)
+		)
+		.addIntegerOption(optionBuilder => optionBuilder
+			.setName("max-intake")
+			.setDescription("The maximum number of messages to be scanned from #submissions-intake.")
+			.setRequired(false)
+			.setMinValue(0)
 		)
 		.setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 	async execute(interaction) {
 		const deferPromise = interaction.deferReply({ephemeral: true});
 		
 		const mode = interaction.options.getString("mode", true);
-		
+		const maxIntake = interaction.options.getInteger("max-intake", false) ?? process.env.MAX_INTAKE_SYNC;
+
 		let promisedChannels;
 		const channelManager = interaction.client.channels;
 		switch(mode) {
@@ -53,7 +61,7 @@ module.exports = {
 				promisedChannels = await Promise.all([
 					channelManager.fetch(process.env.SUBMISSIONS_INTAKE_ID), 
 					channelManager.fetch(process.env.SUBMISSIONS_FORUM_ID)]);
-				await handleIntakeSync(promisedChannels[0], promisedChannels[1]); 
+				await handleIntakeSync(promisedChannels[0], promisedChannels[1], maxIntake); 
 				break;
 			case("forums"):
 				promisedChannels = await Promise.all([
@@ -69,7 +77,7 @@ module.exports = {
 					channelManager.fetch(process.env.VETO_FORUM_ID) // TODO BETTER CODE STRUCTURE WOULD BE PASS HTE PROMISES TO THE METHODS AND HAVE THEM AWAIT THEM INTERNALLY?
 				]);
 				await handleForumsSync(promisedChannels[1], promisedChannels[2]); // Intake happens after forum sync as it checks the DB before posting, which might not be ready if done in another order
-				await handleIntakeSync(promisedChannels[0], promisedChannels[1]);
+				await handleIntakeSync(promisedChannels[0], promisedChannels[1], maxIntake);
 				await handleJudgeSync(promisedChannels[1], promisedChannels[2]);
 		}
 
@@ -163,15 +171,14 @@ async function handleForumsSync(submissionsForum, vetoForum) {
 	}
 }
 
-async function handleIntakeSync(intakeChannel, submissionsForum) {
-	const initialMessages = await fetchMessages(intakeChannel, process.env.INTAKE_SYNC_MAX);
+async function handleIntakeSync(intakeChannel, submissionsForum, maxIntake) {
+	const initialMessages = await fetchMessages(intakeChannel, maxIntake);
 	for(const initialMessage of initialMessages) {
 		const message = await intakeChannel.messages.fetch(initialMessage.id);
 
 		const videoLinks = getVideosFromMessage(message);
 		for(const videoLink of videoLinks) {
-			const alreadyExists = await Submission.exists({videoLink: videoLink});
-			if(alreadyExists) continue;
+			if(await submissionLinkExists(videoLink)) continue;
 
 			const thread = (await createReactedThreadsFromVideos([videoLink], submissionsForum))[0];
 			Submission.enqueue(() => Submission.create({threadId: thread.id, videoLink: videoLink, status: "AWAITING DECISION"}));

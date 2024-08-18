@@ -5,14 +5,13 @@ const Judge = require("../../../mongo/Judge");
 
 const createThreadAndReact = require("./createThreadAndReact");
 const getTagByEmojiCode = require("./getTagByEmojiCode");
-
+const submissionLinkExists = require("../../submissionLinkExists");
 
 module.exports = async (videoLinks, forum, judgeTypes) => {
 	const status = forum.id === process.env.SUBMISSIONS_FORUM_ID ? "AWAITING DECISION" : "AWAITING VETO";
 
 	for(const videoLink of videoLinks) {
-		const alreadyExists = await Submission.enqueue(() => Submission.exists({videoLink: videoLink}));
-		if(alreadyExists) continue;
+		if(await submissionLinkExists(videoLink)) continue;
 	
 		const waitingTag = getTagByEmojiCode(forum.availableTags, "⚖️");
 		const thread = await createThreadAndReact(forum, {message: videoLink, appliedTags: [waitingTag.id]});
