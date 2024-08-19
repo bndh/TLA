@@ -112,11 +112,11 @@ async function handleForumsSync(submissionsForum, vetoForum) {
 		
 		let entry = await entryPromise;
 		if(!entry) {
-			entry = await Submission.create({
+			entry = await Submission.enqueue(() => Submission.create({
 				threadId: fetchedThread.id, 
 				videoLink: videoLink,
 				status: "AWAITING VETO"
-			});
+			}));
 		}
 
 		const appliedTag = tagMap.get(fetchedThread.appliedTags[0]);

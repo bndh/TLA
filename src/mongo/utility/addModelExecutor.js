@@ -7,23 +7,20 @@ module.exports = (model) => {
 		const queryPromise = new Promise(function(resolve) {
 			resolveQuery = resolve;
 		});
-		const queryContainer = {
-			async execute() {
-				const queryResult = await query();
-				resolveQuery(queryResult);
-			}
-		};
 		
-		model.queue.push(queryContainer);
-		if(!model.running) model.execute();
+		const queryFunction = async () => resolveQuery(await query());
+
+		model.queue.push(queryFunction);
+		if(!model.running) model.runExecutor();
 		
 		return queryPromise;
 	};
-	model.execute = async () => {
+
+	model.runExecutor = async () => {
 		model.running = true;
 		while(model.queue.length > 0) {
-			const queryContainer = model.queue.shift();
-			await queryContainer.execute();
+			const queryFunction = model.queue.shift();
+			await queryFunction();
 		}
 		model.running = false;
 	};

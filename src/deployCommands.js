@@ -24,4 +24,4 @@ const rest = new REST().setToken(process.env.TOKEN);
 	} catch(error) {
 		console.error(error);
 	}
-})(); // This pair of brackets runs this
+})(); // This pair of brackets calls this, as it would with console.log() for example; the only difference is that this function is anonymous
