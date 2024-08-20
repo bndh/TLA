@@ -66,17 +66,21 @@ async function checkChannels() {
 }
 
 async function startPendingCountdowns() {
-	const pendingThreads = await Submission.enqueue(() => Submission.find({expirationTime: {$gte: 0}})); // Slightly hacky way of making this work
+	const pendingThreads = await Submission.enqueue(() => 
+		Submission.find({status: "PENDING APPROVAL"})
+				  .select({threadId: 1, expirationTime: 1, _id: 0})																
+				  .exec()
+	);
+	if(!pendingThreads) return;
+
 	for(const pendingThread of pendingThreads) {
-		setTimeout(
-			() => handleVetoJudgement(client, pendingThread.threadId),
-			pendingThread.expirationTime - Date.now().valueOf()
-		);
 		const timeout = pendingThread.expirationTime - Date.now().valueOf();
+		setTimeout(() => handleVetoJudgement(client, pendingThread.threadId), timeout);
 		console.log(`Set timeout for ${pendingThread.threadId} at ${timeout > 0 ? timeout : 0}ms`);
 	}
 }
 
 async function checkChannel(channelId, channelName) {
-	client.channels.fetch(channelId).catch(() => console.error(`Channel "${channelName}" ("${channelId}") not found! \nIt is strongly advised to set this .env value and restart.`));
+	client.channels.fetch(channelId)
+		.catch(() => console.error(`Channel "${channelName}" ("${channelId}") not found! \nIt is strongly advised to set this .env value and restart.`));
 }

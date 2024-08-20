@@ -1,21 +1,21 @@
 require("dotenv").config();
 const {SlashCommandBuilder, PermissionFlagsBits} = require("discord.js");
+
 const Judge = require("../../mongo/Judge");
-const tallyUserThreadReactions = require("../../utility/discord/reactions/tallyUserThreadReactions");
-const getTagByEmojiCode = require("../../utility/discord/threads/getTagByEmojiCode");
+const Submission = require("../../mongo/Submission");
 
 module.exports = {
 	data: new SlashCommandBuilder()
 		.setName("register")
 		.setDescription("Manually register a user in the judge database.")
 		.addUserOption(optionBuilder => 
-			optionBuilder.setName("user")
-				.setDescription("The user to be registered.")
+			optionBuilder.setName("registree")
+				.setDescription("The registree.")
 				.setRequired(true)
 		)
 		.addStringOption(optionBuilder => 
-			optionBuilder.setName("role")
-				.setDescription("The role that the user will have in the judging system.")
+			optionBuilder.setName("judge-type")
+				.setDescription("The role that the user will serve in the judging system.")
 				.setRequired(true)
 				.addChoices(
 					{name: "LN", value: "nominator"},
@@ -26,42 +26,35 @@ module.exports = {
 	async execute(interaction) {
 		const deferPromise = interaction.deferReply({ephemeral: true});
 
-		const user = interaction.options.getUser("user", true);
-		const userType = interaction.options.getString("role", true);
+		const registree = interaction.options.getUser("registree", true);
+		const judgeType = interaction.options.getString("judge-type", true);
 
-		const forumIds = [process.env.VETO_FORUM_ID];
-		if(userType === "admin") forumIds.push(process.env.SUBMISSIONS_FORUM_ID);
+		let forumStatuses; // The statuses corresponding with the submissions the judge should judge
+		if(judgeType === "nominator") forumStatuses = ["AWAITING VETO", "PENDING APPROVAL"];
+		else forumStatuses = ["AWAITING DECISION", "AWAITING VETO", "PENDING APPROVAL"];
+		
+		const threadEntries = await Submission.enqueue(() => 
+			Submission.find({status: {$in: forumStatuses}})
+					  .select({threadId: 1, _id: 0})
+					  .exec()
+		);
+		const threadIds = threadEntries.map(threadEntry => threadEntry.threadId);
 
-		const tallyPromises = [];
-		for(const forumId of forumIds) {
-			tallyPromises.push(await fetchAndTallyUnreactedThreadIds(client, forumId, user.id));
-		}
-		const threadIds = (await Promise.all(tallyPromises)).flat();
-
-		const entry = await Judge.enqueue(() => Judge.findOne({userId: user.id}));
-		if(!entry) {
+		// Saving to DB
+		const existingEntry = await Judge.enqueue(() => Judge.findOne({userId: registree.id}).exec());
+		if(!existingEntry) {
 			await Judge.enqueue(() => Judge.create({
-				userId: user.id,
-				judgeType: userType,
+				userId: registree.id,
+				judgeType: judgeType,
 				unjudgedThreadIds: threadIds
 			}));
-		} else {
-			entry.judgeType = userType;
-			entry.unjudgedThreadIds = threadIds;
-			await Judge.enqueue(() => entry.save());
+		} else { // Update existing entry
+			existingEntry.judgeType = judgeType;
+			existingEntry.unjudgedThreadIds = threadIds;
+			await Judge.enqueue(() => existingEntry.save());
 		}
 
 		await deferPromise;
-		interaction.editReply(`Successfully registered \`${user.id}\` with \`${threadIds.length}\` submissions left to judge.`);
+		interaction.editReply(`Successfully registered ${registree.toString()}, having appointed \`${threadIds.length}\` submission${threadIds.length === 1 ? "" : "s"}.`);
 	}
 };
-
-async function fetchAndTallyUnreactedThreadIds(client, forumId, userId) {
-	const forum = await client.channels.fetch(forumId);
-	const undesiredTagIds = [
-		getTagByEmojiCode(forum.availableTags, "✅").id,
-		getTagByEmojiCode(forum.availableTags, "⛔").id
-	];
-	const threads = await tallyUserThreadReactions(forum, userId, ["✅", "⛔"], true, undesiredTagIds);
-	return threads.map(thread => thread.id);
-}

@@ -16,7 +16,11 @@ module.exports = async (videoLinks, forum, judgeTypes) => {
 		const waitingTag = getTagByEmojiCode(forum.availableTags, "⚖️");
 		const thread = await createThreadAndReact(forum, {message: videoLink, appliedTags: [waitingTag.id]});
 
-		Submission.enqueue(() => Submission.create({threadId: thread.id, videoLink: videoLink, status: status})); // Enqueue will ensure that this happens in order
-		Judge.enqueue(() => Judge.updateMany({judgeType: {$in: judgeTypes}}, {$push: {unjudgedThreadIds: thread.id}}));
+		Submission.enqueue(() => Submission.create({
+			threadId: thread.id, 
+			videoLink: videoLink, 
+			status: status
+		})); // Enqueue will ensure that this happens in order
+		Judge.enqueue(() => Judge.updateMany({judgeType: {$in: judgeTypes}}, {$push: {unjudgedThreadIds: thread.id}}).exec());
 	}
 }

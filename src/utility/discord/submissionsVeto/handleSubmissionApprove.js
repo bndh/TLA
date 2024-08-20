@@ -9,9 +9,9 @@ module.exports = async (reactionChannel, tags, message) => {
 	const vetoForum = await message.client.channels.fetch(process.env.VETO_FORUM_ID);
 	const newThread = (await createReactedThreadsFromVideos(getVideosFromMessage(message), vetoForum))[0];
 
-	Submission.enqueue(() => Submission.updateOne({threadId: reactionChannel.id}, {threadId: newThread.id, status: "AWAITING VETO"}));
-	Judge.enqueue(() => Judge.updateMany({judgeType: "admin"}, {$pull: {unjudgedThreadIds: reactionChannel.id}}));
-	Judge.enqueue(() => Judge.updateMany({}, {$push: {unjudgedThreadIds: newThread.id}}));
+	Submission.enqueue(() => Submission.updateOne({threadId: reactionChannel.id}, {threadId: newThread.id, status: "AWAITING VETO"}).exec());
+	Judge.enqueue(() => Judge.updateMany({judgeType: "admin"}, {$pull: {unjudgedThreadIds: reactionChannel.id}}).exec());
+	Judge.enqueue(() => Judge.updateMany({}, {$push: {unjudgedThreadIds: newThread.id}}).exec());
 	
 	const approvedTag = getTagByEmojiCode(tags, "✅");
 	reactionChannel.setAppliedTags([approvedTag.id]);

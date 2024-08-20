@@ -104,7 +104,7 @@ async function handleForumsSync(submissionsForum, vetoForum) {
 	const initialVetoThreads = await vetoThreadPromise;
 	
 	for(const initialVetoThread of initialVetoThreads.values()) {
-		const entryPromise = Submission.enqueue(() => Submission.findOne({threadId: initialVetoThread.id}));
+		const entryPromise = Submission.enqueue(() => Submission.findOne({threadId: initialVetoThread.id}).exec());
 
 		const fetchedThread = await vetoForum.threads.fetch(initialVetoThread.id);
 		const starterMessage = await fetchedThread.fetchStarterMessage({cache: false});
@@ -142,7 +142,7 @@ async function handleForumsSync(submissionsForum, vetoForum) {
 
 	const initialSubmissionsThreads = await submissionsThreadPromise;
 	for(const initialSubmissionsThread of initialSubmissionsThreads.values()) {
-		const entryPromise = Submission.enqueue(() => Submission.findOne({threadId: initialSubmissionsThread.id}));
+		const entryPromise = Submission.enqueue(() => Submission.findOne({threadId: initialSubmissionsThread.id}).exec());
 
 		const fetchedThread = await submissionsForum.threads.fetch(initialSubmissionsThread.id);
 		const starterMessage = await fetchedThread.fetchStarterMessage({cache: false});
@@ -150,13 +150,13 @@ async function handleForumsSync(submissionsForum, vetoForum) {
 
 		let entry = await entryPromise;
 		if(!entry) {
-			entry = await Submission.enqueue(() => Submission.findOne({videoLink: videoLink}));
+			entry = await Submission.enqueue(() => Submission.findOne({videoLink: videoLink}).exec());
 			if(entry) continue; // Indicates that the entry is already in the veto stage, which will have been synced by this point
 			else entry = await Submission.create({
 					threadId: fetchedThread.id, 
 					videoLink: videoLink,
 					status: "AWAITING DECISION"
-				});
+			});
 		}
 
 		const appliedTag = tagMap.get(fetchedThread.appliedTags[0]);
@@ -181,8 +181,12 @@ async function handleIntakeSync(intakeChannel, submissionsForum, maxIntake) {
 			if(await submissionLinkExists(videoLink)) continue;
 
 			const thread = (await createReactedThreadsFromVideos([videoLink], submissionsForum))[0];
-			Submission.enqueue(() => Submission.create({threadId: thread.id, videoLink: videoLink, status: "AWAITING DECISION"}));
-			Judge.enqueue(() => Judge.updateMany({}, {$push: {unjudgedThreadIds: thread.id}}));
+			Submission.enqueue(() => Submission.create({
+				threadId: thread.id, 
+				videoLink: videoLink, 
+				status: "AWAITING DECISION"
+			}));
+			Judge.enqueue(() => Judge.updateMany({}, {$push: {unjudgedThreadIds: thread.id}}).exec());
 		}
 	}
 }
@@ -196,7 +200,7 @@ async function handleJudgeSync(submissionsForum, vetoForum) {
 
 async function updateJudges(judgeType, forums) {
 	const judgeMap = new Map();
-	const judges = await Judge.enqueue(() => Judge.find({judgeType: judgeType}).select({userId: 1, _id: 0}));
+	const judges = await Judge.enqueue(() => Judge.find({judgeType: judgeType}).select({userId: 1, _id: 0}).exec());
 
 	for(const judge of judges) {
 		judgeMap.set(judge.userId, []);
@@ -225,7 +229,7 @@ async function updateJudges(judgeType, forums) {
 	}
 
 	for(const judgeId of judgeMap.keys()) {
-		Judge.enqueue(() => Judge.updateOne({userId: judgeId}, {unjudgedThreadIds: judgeMap.get(judgeId)}));
+		Judge.enqueue(() => Judge.updateOne({userId: judgeId}, {unjudgedThreadIds: judgeMap.get(judgeId)}).exec());
 	}
 }
 

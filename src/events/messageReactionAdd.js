@@ -23,7 +23,7 @@ async function handleIntactReaction(messageReaction, user) {
 	if(forumChannel.id === process.env.SUBMISSIONS_FORUM_ID) await handleSubmissionResponse(messageReaction, reactionChannel);
 	else if(forumChannel.id === process.env.VETO_FORUM_ID) handleVetoResponse(messageReaction, reactionChannel);
 	
-	Judge.enqueue(() => Judge.updateOne({userId: user.id}, {$pull: {unjudgedThreadIds: reactionChannel.id}}));
+	Judge.enqueue(() => Judge.updateOne({userId: user.id}, {$pull: {unjudgedThreadIds: reactionChannel.id}}).exec());
 }
 
 async function handleSubmissionResponse(messageReaction, reactionChannel) {

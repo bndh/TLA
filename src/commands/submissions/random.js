@@ -8,12 +8,22 @@ module.exports = {
 	async execute(interaction) {
 		const deferPromise = interaction.deferReply({ephemeral: true});
 
-		const judgeEntry = await Judge.enqueue(() => Judge.findOne({userId: interaction.user.id}).select({unjudgedThreadIds: 1, _id: 0}));
-		const layoutThreadIds = judgeEntry.unjudgedThreadIds;
-		const randomThreadId = layoutThreadIds[Math.floor(Math.random() * layoutThreadIds.length)];
-		const threadLink = (await interaction.client.channels.fetch(randomThreadId)).url;
+		const judgeEntry = await Judge.enqueue(() => {
+			Judge.findOne({userId: interaction.user.id})
+				 .select({unjudgedThreadIds: 1, _id: 0})
+		 		 .exec()
+		});
+		if(!judgeEntry) {
+			await deferPromise;
+			interaction.editReply(`You are not yet \`registered\`. Contact an \`admin\` if you believe this is incorrect.`);
+			return;
+		}
+
+		const unjudgedThreadIds = judgeEntry.unjudgedThreadIds;
+		const randomUnjudgedId = unjudgedThreadIds[Math.floor(Math.random() * unjudgedThreadIds.length)];
+		const thread = await interaction.client.channels.fetch(randomUnjudgedId);
 		
 		await deferPromise;
-		interaction.editReply(`Found unjudged layout at: ${threadLink}`);
+		interaction.editReply(`Found unjudged layout at: ${thread.url}!`);
 	}
 };

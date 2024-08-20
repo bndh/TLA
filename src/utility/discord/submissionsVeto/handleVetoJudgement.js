@@ -29,6 +29,6 @@ module.exports = async (client, submissionChannelId) => { // Use ids as it may b
 	const videoLink = getVideosFromMessage(submissionMessage);
 	submissionMessage.edit(`🥳 **Judging Concluded** on ${time(date, TimestampStyles.LongDateTime)}!\n\n${videoLink[0]}`);
 
-	Judge.enqueue(() => Judge.updateMany({}, {$pull: {unjudgedThreadIds: submissionChannelId}}));
-	Submission.enqueue(() => Submission.updateOne({threadId: submissionChannelId}, {$set: {status: decisionTag.name}, $unset: {expirationTime: 1}}));
+	Judge.enqueue(() => Judge.updateMany({}, {$pull: {unjudgedThreadIds: submissionChannelId}}).exec());
+	Submission.enqueue(() => Submission.updateOne({threadId: submissionChannelId}, {$set: {status: decisionTag.name}, $unset: {expirationTime: 1}}).exec());
 }
