@@ -18,7 +18,7 @@ const submissionLinkExists = require("../../utility/submissionLinkExists");
 
 const judgementEmojis = process.env.JUDGEMENT_EMOJIS.split(", ");
 const waitingEmojis = process.env.WAITING_EMOJIS.split(", ");
-
+// TODO SO MANY EDGE CASES FOR FORUM SYNC... LIST AND TRULY SORT
 module.exports = {
 	data: new SlashCommandBuilder()
 		.setName("sync")
@@ -46,39 +46,20 @@ module.exports = {
 		
 		const mode = interaction.options.getString("mode", true);
 		const maxIntake = interaction.options.getInteger("max-intake", false) ?? process.env.MAX_INTAKE_SYNC;
-
-		let promisedChannels;
 		const channelManager = interaction.client.channels;
-		switch(mode) {
-			case("judges"):
-				promisedChannels = await Promise.all([
-					channelManager.fetch(process.env.SUBMISSIONS_FORUM_ID), 
-					channelManager.fetch(process.env.VETO_FORUM_ID)
-				]);
-				await handleJudgeSync(promisedChannels[0], promisedChannels[1]); 
-				break;
-			case("intake"):
-				promisedChannels = await Promise.all([
-					channelManager.fetch(process.env.SUBMISSIONS_INTAKE_ID), 
-					channelManager.fetch(process.env.SUBMISSIONS_FORUM_ID)]);
-				await handleIntakeSync(promisedChannels[0], promisedChannels[1], maxIntake); 
-				break;
-			case("forums"):
-				promisedChannels = await Promise.all([
-					channelManager.fetch(process.env.SUBMISSIONS_FORUM_ID), 
-					channelManager.fetch(process.env.VETO_FORUM_ID)
-				]);
-				await handleForumsSync(promisedChannels[0], promisedChannels[1]);
-				break;
-			case("all"):
-				promisedChannels = await Promise.all([
-					channelManager.fetch(process.env.SUBMISSIONS_INTAKE_ID),
-					channelManager.fetch(process.env.SUBMISSIONS_FORUM_ID), 
-					channelManager.fetch(process.env.VETO_FORUM_ID) // TODO BETTER CODE STRUCTURE WOULD BE PASS HTE PROMISES TO THE METHODS AND HAVE THEM AWAIT THEM INTERNALLY?
-				]);
-				await handleForumsSync(promisedChannels[1], promisedChannels[2]); // Intake happens after forum sync as it checks the DB before posting, which might not be ready if done in another order
-				await handleIntakeSync(promisedChannels[0], promisedChannels[1], maxIntake);
-				await handleJudgeSync(promisedChannels[1], promisedChannels[2]);
+
+		if(mode === "forums") await forumsSetupAndSync(channelManager);
+		else if(mode === "intake") await intakeSetupAndSync(channelManager);
+		else if(mode === "judges") await judgeSetupAndSync(channelManager);
+		else {
+			let promisedChannels = await Promise.all([
+				channelManager.fetch(process.env.SUBMISSIONS_INTAKE_ID),
+				channelManager.fetch(process.env.SUBMISSIONS_FORUM_ID), 
+				channelManager.fetch(process.env.VETO_FORUM_ID) // TODO BETTER CODE STRUCTURE WOULD BE PASS HTE PROMISES TO THE METHODS AND HAVE THEM AWAIT THEM INTERNALLY?
+			]);
+			await handleForumsSync(promisedChannels[1], promisedChannels[2]); // Intake happens after forum sync as it checks the DB before posting, which might not be ready if done in another order
+			await handleIntakeSync(promisedChannels[0], promisedChannels[1], maxIntake);
+			await handleJudgeSync(promisedChannels[1], promisedChannels[2]);
 		}
 
 		await deferPromise;
@@ -86,89 +67,32 @@ module.exports = {
 	}
 };
 
+async function forumsSetupAndSync(channelManager) {
+	let promisedChannels = await Promise.all([
+		channelManager.fetch(process.env.SUBMISSIONS_FORUM_ID), 
+		channelManager.fetch(process.env.VETO_FORUM_ID)
+	]);
+	handleForumsSync(promisedChannels[0], promisedChannels[1]);
+}
+
 async function handleForumsSync(submissionsForum, vetoForum) {
+	console.info("==> Starting Forum Sync");
 	const vetoThreadPromise = getAllThreads(vetoForum);
 	const submissionsThreadPromise = getAllThreads(submissionsForum);
+	console.info("Syncing Veto...");
+	await handleVetoSync(vetoForum, await vetoThreadPromise);
+	console.info("Syncing Submissions...");
+	await handleSubmissionSync(submissionsForum, await submissionsThreadPromise);
+	console.info("==> Finished Forum Sync");
+}
 
-	let waitingTag = getTagByEmojiCode(vetoForum.availableTags, waitingEmojis[0]);
-	const pendingTag = getTagByEmojiCode(vetoForum.availableTags, waitingEmojis[1]);
-	let approvedTag = getTagByEmojiCode(vetoForum.availableTags, judgementEmojis[0]);
-	let deniedTag = getTagByEmojiCode(vetoForum.availableTags, judgementEmojis[1]);
-	let tagMap = new Map([
-			[waitingTag.id, waitingTag],
-			[pendingTag.id, pendingTag],
-			[approvedTag.id, approvedTag],
-			[deniedTag.id, deniedTag]
-	]);
-
-	const initialVetoThreads = await vetoThreadPromise;
-	
-	for(const initialVetoThread of initialVetoThreads.values()) {
-		const entryPromise = Submission.enqueue(() => Submission.findOne({threadId: initialVetoThread.id}).exec());
-
-		const fetchedThread = await vetoForum.threads.fetch(initialVetoThread.id);
-		const starterMessage = await fetchedThread.fetchStarterMessage({cache: false});
-		const videoLink = getVideosFromMessage(starterMessage, false)[0]; // These messages will only ever have one video link
-		
-		let entry = await entryPromise;
-		if(!entry) {
-			entry = await Submission.enqueue(() => Submission.create({
-				threadId: fetchedThread.id, 
-				videoLink: videoLink,
-				status: "AWAITING VETO"
-			}));
-		}
-
-		const appliedTag = tagMap.get(fetchedThread.appliedTags[0]);
-		if(appliedTag.name === "Awaiting Veto") { // We only care about Awaiting Veto because Approved/Denied have completed their lifecycle, and Pending Approval should be handled on bot launch
-			const reactionCounts = await tallyReactions(starterMessage, [judgementEmojis[0], judgementEmojis[1]]);
-			if(reactionCounts[0] + reactionCounts[1] >= +process.env.VETO_THRESHOLD + 2) {
-				handleVetoPending(fetchedThread, pendingTag.id, starterMessage);
-			}
-		} else {
-			entry.status = appliedTag.name;
-			await Submission.enqueue(() => entry.save());
-		}
-	}
-
-	waitingTag = getTagByEmojiCode(submissionsForum.availableTags, waitingEmojis[0]);
-	approvedTag = getTagByEmojiCode(submissionsForum.availableTags, judgementEmojis[0]);
-	deniedTag = getTagByEmojiCode(submissionsForum.availableTags, judgementEmojis[1]);
-	tagMap = new Map([
-		[waitingTag.id, waitingTag],
-		[approvedTag.id, approvedTag],
-		[deniedTag.id, deniedTag]
-	]);
-
-	const initialSubmissionsThreads = await submissionsThreadPromise;
-	for(const initialSubmissionsThread of initialSubmissionsThreads.values()) {
-		const entryPromise = Submission.enqueue(() => Submission.findOne({threadId: initialSubmissionsThread.id}).exec());
-
-		const fetchedThread = await submissionsForum.threads.fetch(initialSubmissionsThread.id);
-		const starterMessage = await fetchedThread.fetchStarterMessage({cache: false});
-		const videoLink = getVideosFromMessage(starterMessage, false)[0];
-
-		let entry = await entryPromise;
-		if(!entry) {
-			entry = await Submission.enqueue(() => Submission.findOne({videoLink: videoLink}).exec());
-			if(entry) continue; // Indicates that the entry is already in the veto stage, which will have been synced by this point
-			else entry = await Submission.create({
-					threadId: fetchedThread.id, 
-					videoLink: videoLink,
-					status: "AWAITING DECISION"
-			});
-		}
-
-		const appliedTag = tagMap.get(fetchedThread.appliedTags[0]);
-		if(appliedTag.name === "Awaiting Decision") {
-			const reactionCounts = await tallyReactions(starterMessage, [judgementEmojis[0], judgementEmojis[1]]);
-			if(reactionCounts[0] > reactionCounts[1]) {
-				await handleSubmissionApprove(fetchedThread, submissionsForum.availableTags, starterMessage);
-			} else if(reactionCounts[0] < reactionCounts[1]) {
-				handleSubmissionDeny(fetchedThread, submissionsForum.availableTags);
-			}
-		}
-	}
+async function intakeSetupAndSync(channelManager) {
+	console.info("==> Starting Intake Sync");
+	promisedChannels = await Promise.all([
+		channelManager.fetch(process.env.SUBMISSIONS_INTAKE_ID), 
+		channelManager.fetch(process.env.SUBMISSIONS_FORUM_ID)]);
+	await handleIntakeSync(promisedChannels[0], promisedChannels[1], maxIntake);
+	console.info("==> Finished Intake Sync");
 }
 
 async function handleIntakeSync(intakeChannel, submissionsForum, maxIntake) {
@@ -191,11 +115,169 @@ async function handleIntakeSync(intakeChannel, submissionsForum, maxIntake) {
 	}
 }
 
+async function judgeSetupAndSync(channelManager) {
+	console.info("==> Starting Judge Sync");
+	let promisedChannels = await Promise.all([
+		channelManager.fetch(process.env.SUBMISSIONS_FORUM_ID), 
+		channelManager.fetch(process.env.VETO_FORUM_ID)
+	]);
+	await handleJudgeSync(promisedChannels[0], promisedChannels[1]); 
+	console.info("==> Finished Judge Sync");
+}
+
 async function handleJudgeSync(submissionsForum, vetoForum) {
 	const judgeSyncPromises = [2];
 	judgeSyncPromises[0] = await updateJudges("nominator", [vetoForum]);
 	judgeSyncPromises[1] = await updateJudges("admin", [vetoForum, submissionsForum])
 	await Promise.all(judgeSyncPromises);
+}
+
+async function handleVetoSync(vetoForum, vetoThreadPromise) {
+	const pendingTag = getTagByEmojiCode(vetoForum, waitingEmojis[1]);
+	let tagMap = createIdTagMap(
+		getTagByEmojiCode(vetoForum, waitingEmojis[0]), 
+		pendingTag, // Used later if the submission should be changed to pending 
+		getTagByEmojiCode(vetoForum, judgementEmojis[1]), 
+		getTagByEmojiCode(vetoForum, judgementEmojis[1])
+	);
+
+	const initialVetoThreads = await vetoThreadPromise;
+	
+	for(const initialVetoThread of initialVetoThreads.values()) {
+		const entryPromise = Submission.enqueue(() => Submission.findOne({threadId: initialVetoThread.id}).exec());
+
+		let fetchedThread = await vetoForum.threads.fetch(initialVetoThread.id);
+		let starterMessage;
+		try {
+			starterMessage = await fetchedThread.fetchStarterMessage({cache: false});
+		} catch(error) {
+			starterMessage = undefined;
+		}
+
+		let entry = await entryPromise; 
+		
+		if(!starterMessage) { // Searching for an alternative submission requires knowledge of the videoLink, so we try to resolve a missing video link before we do a missing entry
+			if(entry && entry.videoLink) { // Salvageable. Lazily evaluated so no need to worry about entry.videoLink causing issues when entry is undefined / null
+				const oldThreadTagId = fetchedThread.appliedTags[0]; // Replace old thread with new (to preserve the starter message aesthetic)
+				await fetchedThread.delete("Replaced by new thread as old thread did not have a videoLink.");
+				fetchedThread = (await createReactedThreadsFromVideos([entry.videoLink], vetoForum))[0];
+				starterMessage = await fetchedThread.fetchStarterMessage({cache: false});
+				fetchedThread.setAppliedTags([oldThreadTagId]);
+
+				entry.threadId = fetchedThread.id; // Update entry
+				await Submission.enqueue(() => entry.save()); // Need to save here as the new threadId would not be preserved in the handleVetoPending method
+			} else { // Cannot find a videoLink so must abort
+				let deletionPromises = [2];
+				deletionPromises[0] = fetchedThread.delete("Could not find video during forum sync.");
+				if(entry) {
+					deletionPromises[1] = Submission.enqueue(() => Submission.deleteOne({_id: entry._id}));
+				}
+				await Promise.all(deletionPromises);
+				continue;
+			}
+		}
+		const videoLink = getVideosFromMessage(starterMessage, false)[0];
+
+		if(!entry) {
+			entry = await Submission.enqueue(() => Submission.create({
+				threadId: fetchedThread.id, 
+				videoLink: videoLink,
+				status: "TEMP" // Status will be overwritten by the end of the method
+			}));
+		}
+		
+		const appliedTag = tagMap.get(fetchedThread.appliedTags[0]);
+		if(appliedTag.name === "Awaiting Veto") { // We only care about Awaiting Veto because Approved/Denied have completed their lifecycle
+			const reactionCounts = await tallyReactions(starterMessage, [judgementEmojis[0], judgementEmojis[1]]);
+			if(reactionCounts[0] + reactionCounts[1] >= +process.env.VETO_THRESHOLD + 2) {
+				handleVetoPending(fetchedThread, pendingTag.id, starterMessage); // Updates entry
+			}
+			continue;
+		}
+		if(appliedTag.name === "Pending Approval") {
+			if(entry.expirationTime) {
+				const timeout = pendingThread.expirationTime - Date.now().valueOf();
+				setTimeout(() => handleVetoJudgement(client, pendingThread.threadId), timeout);
+			} else { // Also implies that there was no entry, in which case we have nothing to go off for the expiration time, so we start a fully new one
+				handleVetoPending(fetchedThread, pendingTag.id, starterMessage); // Sets status
+			}
+		}
+
+		entry.status = appliedTag.name;
+		await Submission.enqueue(() => entry.save());
+	}
+}
+
+async function handleSubmissionSync(submissionsForum, submissionsThreadPromise) {
+	const approvedTag = getTagByEmojiCode(submissionsForum, judgementEmojis[0]);
+	const tagMap = createIdTagMap(
+		getTagByEmojiCode(submissionsForum, waitingEmojis[0]), 
+		approvedTag,
+		getTagByEmojiCode(submissionsForum, judgementEmojis[1])
+	);
+
+	const initialSubmissionsThreads = await submissionsThreadPromise;
+	for(const initialSubmissionsThread of initialSubmissionsThreads.values()) {
+		const entryPromise = Submission.enqueue(() => Submission.findOne({threadId: initialSubmissionsThread.id}).exec());
+
+		let fetchedThread = await submissionsForum.threads.fetch(initialSubmissionsThread.id);
+		let starterMessage; // Starter message may have been deleted, so:
+		try {
+			starterMessage = await fetchedThread.fetchStarterMessage({cache: false}); 
+		} catch(error) {
+			starterMessage = undefined;
+		}
+		
+		let entry = await entryPromise;
+
+		if(!starterMessage) {
+			if(entry && entry.videoLink) {
+				const oldThreadTagId = fetchedThread.appliedTags[0];
+				await fetchedThread.delete("Replaced by new thread as old thread did not have a videoLink.");
+				fetchedThread = (await createReactedThreadsFromVideos([entry.videoLink], submissionsForum))[0];
+				starterMessage = await fetchedThread.fetchStarterMessage({cache: false});
+				fetchedThread.setAppliedTags([oldThreadTagId]);
+
+				entry.threadId = fetchedThread.id; // Update entry with new data
+				await Submission.enqueue(() => entry.save()); // Need to save here as the new threadId would not be preserved in the sumbissionApprove/Deny methods
+			} else { // Not salvageable so must delete
+				let deletionPromises = [2];
+				deletionPromises[0] = fetchedThread.delete("Could not find video during forum sync.");
+				if(entry) {
+					deletionPromises[1] = Submission.enqueue(() => Submission.deleteOne({_id: entry._id}));
+				}
+				await Promise.all(deletionPromises);
+				continue;
+			}
+		}
+
+		const videoLink = getVideosFromMessage(starterMessage, false)[0]; // Should be no case where a submission does not have a videoLink 
+
+		if(!entry) {
+			entry = await Submission.enqueue(() => Submission.findOne({videoLink: videoLink}).exec());
+			if(entry) { // Indicates that the thread already exists in veto
+				fetchedThread.setAppliedTags([approvedTag.id]);
+				continue; // Indicates that the entry is already in the veto stage, which will have been synced by this point
+			} else entry = await Submission.create({
+					threadId: fetchedThread.id, 
+					videoLink: videoLink,
+					status: "TEMP"
+			});
+		}
+		
+		const appliedTag = tagMap.get(fetchedThread.appliedTags[0]);
+		if(appliedTag.name === "Awaiting Decision") {
+			const reactionCounts = await tallyReactions(starterMessage, [judgementEmojis[0], judgementEmojis[1]]);
+			if(reactionCounts[0] > reactionCounts[1]) {
+				await handleSubmissionApprove(fetchedThread, starterMessage);
+			} else if(reactionCounts[0] < reactionCounts[1]) {
+				handleSubmissionDeny(fetchedThread);
+			}
+		} else {
+			entry.status = appliedTag.name;
+			await Submission.enqueue(() => entry.save());
+		}
+	}
 }
 
 async function updateJudges(judgeType, forums) {
@@ -208,8 +290,8 @@ async function updateJudges(judgeType, forums) {
 
 	for(const forum of forums) {
 		const judgedTagIds = [
-			getTagByEmojiCode(forum.availableTags, judgementEmojis[0]).id,
-			getTagByEmojiCode(forum.availableTags, judgementEmojis[1]).id
+			getTagByEmojiCode(forum, judgementEmojis[0]).id,
+			getTagByEmojiCode(forum, judgementEmojis[1]).id
 		];
 
 		const initialThreads = await getAllThreads(forum);
@@ -233,62 +315,8 @@ async function updateJudges(judgeType, forums) {
 	}
 }
 
-// CODE FOR DUPE THREADS (VERY UNUSUAL CIRCUMSTANCE)
-
-	// const approvedTag = getTagByEmojiCode(vetoForum.availableTags, judgementEmojis[0]);
-	// const waitingTag = getTagByEmojiCode(vetoForum.availableTags, waitingEmojis[0]);
-	// const pendingTag = getTagByEmojiCode(vetoForum.availableTags, waitingEmojis[1]);
-	// const deniedTag = getTagByEmojiCode(vetoForum.availableTags, judgementEmojis[1]);
-	// const vetoTagMap = new Map([
-	// 	[waitingTag.id, waitingTag],
-	// 	[pendingTag.id, pendingTag],
-	// 	[deniedTag.id, deniedTag],
-	// 	[approvedTag.id, approvedTag]
-	// ]);
-
-	// const initialVetoThreads = await vetoThreadPromise;
-
-	// // for(const initialThread of initialVetoThreads.values()) { // May be redundant
-	// // 	let fetchedThread = await vetoForum.threads.fetch(initialThread);
-	// // 	const starterMessage = await fetchedThread.fetchStarterMessage({cache: false});
-	// // 	const videoLink = getVideosFromText(starterMessage.content)[0];
-	// // 	const entries = await Submission.enqueue(() => Submission.find({videoLink: videoLink}));
-	// // 	console.log(`ENTRIES ${entries}`);
-	// // 	if(entries.length > 1) {
-	// // 		console.log("Larger than 1");
-	// // 		const otherThreadPromises = [];
-	// // 		for(const entry of entries) {
-	// // 			if(entry.threadId === fetchedThread.id) continue;
-	// // 			otherThreadPromises.push(vetoForum.threads.fetch(entry.threadId));
-	// // 		}
-
-	// // 		const extraThreads = [1 + otherThreadPromises.length];
-	// // 		extraThreads[0] = fetchedThread;
-	// // 		extraThreads.push(await Promise.all(otherThreadPromises));
-	// // 		console.log(`Extra Threads: ${extraThreads}`)
-	// // 		extraThreads.sort(async (threadA, threadB) => {
-	// // 			console.log(`THREAD A: ${threadA}`)
-	// // 			console.log(`THREAD B: ${threadB}`)
-	// // 			if(!threadA) return 1;
-	// // 			if(!threadB) return -1;
-
-	// // 			const aTagPriority = vetoTagMap.keys().findIndex(threadA.appliedTags[0]).clamp(0, 2);
-	// // 			const bTagPriority = vetoTagMap.keys().findIndex(threadB.appliedTags[0]).clamp(0, 2);
-	// // 			if(aTagPriority > bTagPriority) return -1;
-	// // 			if(aTagPriority < bTagPriority) return 1;
-				
-	// // 			const starterMessages = await Promise.all([
-	// // 				threadA.fetchStarterMessage({cache: false}),
-	// // 				threadB.fetchStarterMessage({cache: false})
-	// // 			]).map(starterMessage => 
-	// // 					tallyReactions(starterMessage, ...judgementEmojis)
-	// // 					.reduce((accumulator, count) => accumulator + count)
-	// // 			);
-	// // 			if(starterMessages[0] > starterMessages[1]) return -1;
-	// // 			if(starterMessages[0] < starterMessages[1]) return 1;
-	// // 			return 0;
-	// // 		});
-			
-	// // 		Submission.enqueue(() => Submission.deleteMany({videoLink: videoLink, threadId: {$ne: extraThreads[0].id}}));
-	// // 	}
-	// 	break; // delete htis TODO
+function createIdTagMap(...tags) {
+	const tagMap = new Map([]);
+	tags.forEach(tag => tagMap.set(tag.id, tag));
+	return tagMap;
+}

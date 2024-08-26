@@ -42,7 +42,7 @@ module.exports = {
 
 		// Saving to DB
 		const existingEntry = await Judge.enqueue(() => Judge.findOne({userId: registree.id}).exec());
-		if(!existingEntry) {
+		if(!existingEntry) { // Create new entry
 			await Judge.enqueue(() => Judge.create({
 				userId: registree.id,
 				judgeType: judgeType,

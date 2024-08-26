@@ -1,10 +1,10 @@
 const createThreadAndReact = require("./createThreadAndReact");
 const getTagByEmojiCode = require("./getTagByEmojiCode");
 
-module.exports = async (videoLinks, targetForum) => {
-	const waitingTag = getTagByEmojiCode(targetForum.availableTags, "⚖️");
+module.exports = async (videoLinks, forum) => {
+	const waitingTag = getTagByEmojiCode(forum, "⚖️");
 
-	const videoPromises = []
-	videoLinks.forEach(videoLink => videoPromises.push(createThreadAndReact(targetForum, {message: videoLink, appliedTags: [waitingTag.id]})));
-	return Promise.all(videoPromises);
+	const videoThreadPromises = []
+	videoLinks.forEach(videoLink => videoThreadPromises.push(createThreadAndReact(forum, {message: videoLink, appliedTags: [waitingTag.id]})));
+	return Promise.all(videoThreadPromises);
 };

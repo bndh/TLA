@@ -13,7 +13,7 @@ module.exports = async (videoLinks, forum, judgeTypes) => {
 	for(const videoLink of videoLinks) {
 		if(await submissionLinkExists(videoLink)) continue;
 	
-		const waitingTag = getTagByEmojiCode(forum.availableTags, "⚖️");
+		const waitingTag = getTagByEmojiCode(forum, "⚖️");
 		const thread = await createThreadAndReact(forum, {message: videoLink, appliedTags: [waitingTag.id]});
 
 		Submission.enqueue(() => Submission.create({

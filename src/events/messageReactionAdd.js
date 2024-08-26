@@ -27,22 +27,20 @@ async function handleIntactReaction(messageReaction, user) {
 }
 
 async function handleSubmissionResponse(messageReaction, reactionChannel) {
-	const tags = reactionChannel.parent.availableTags;
-
-	if(messageReaction.emoji.name === "⛔") handleSubmissionDeny(reactionChannel, tags);
-	else if(messageReaction.emoji.name === "✅") await handleSubmissionApprove(reactionChannel, tags, messageReaction.message);
+	if(messageReaction.emoji.name === "⛔") handleSubmissionDeny(reactionChannel);
+	else if(messageReaction.emoji.name === "✅") await handleSubmissionApprove(reactionChannel, messageReaction.message);
 }
 
 function handleVetoResponse(messageReaction, reactionChannel) {
 	const judgementEmojis = process.env.JUDGEMENT_EMOJIS.split(", ");
 	if(!judgementEmojis.includes(messageReaction.emoji.name)) return;
 	
-	const tags = reactionChannel.parent.availableTags;
-	const pendingTagId = getTagByEmojiCode(tags, "‼️").id; // Used later
+	const parentForum = reactionChannel.parent;
+	const pendingTagId = getTagByEmojiCode(parentForum, "‼️").id; // Used later
 	const targetTagIds = [
 		pendingTagId,
-		getTagByEmojiCode(tags, "✅").id,
-		getTagByEmojiCode(tags, "⛔").id
+		getTagByEmojiCode(parentForum, "✅").id,
+		getTagByEmojiCode(parentForum, "⛔").id
 	];
 	if(reactionChannel.appliedTags.some(appliedTag => targetTagIds.includes(appliedTag))) return; // We know that pending threads only change after a set amount of time, not after a certain number of emojis
 

@@ -1,5 +1,5 @@
-module.exports = (tags, emojiCode) => {
-	for(const tag of tags) {
+module.exports = (forum, emojiCode) => {
+	for(const tag of forum.availableTags) {
 		if(tag.emoji.name === emojiCode) return tag;
 	}
 };

@@ -22,7 +22,7 @@ module.exports = async (client, submissionChannelId) => { // Use ids as it may b
 		counts.push({emojiCode: emojiCode, count: count});
 	}
 	const decisionEmojiCode = counts.sort((a, b) => b.count - a.count)[0].emojiCode;
-	const decisionTag = getTagByEmojiCode(submissionChannel.parent.availableTags, decisionEmojiCode);
+	const decisionTag = getTagByEmojiCode(submissionChannel.parent, decisionEmojiCode);
 	submissionChannel.setAppliedTags([decisionTag.id]);
 
 	const date = new Date();
