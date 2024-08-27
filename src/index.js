@@ -23,10 +23,11 @@ client = new Client({
 		Partials.Reaction
 	]
 });
+const Info = require("./mongo/Info");
 
 (async () => {
 	await mongoose.connect(process.env.MONGODB_URI);
-	console.log("Connected to Mongoose!");
+	console.log("Connected to Mongoose!");	
 
 	loadCommands();
 	registerListeners();

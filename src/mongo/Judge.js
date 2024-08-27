@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 const addModelExecutor = require("./utility/addModelExecutor");
 
-const nominatorSchema = new mongoose.Schema({
+const judgeSchema = new mongoose.Schema({
 	userId: {
 		type: String,
 		required: true
@@ -16,7 +16,7 @@ const nominatorSchema = new mongoose.Schema({
 	}
 });
 
-const model = mongoose.model("Judge", nominatorSchema); // Compiling the schema into a model. Looks for a table named after the plural of the model name
+const model = mongoose.model("Judge", judgeSchema); // Compiling the schema into a model. Looks for a table named after the plural of the model name
 addModelExecutor(model);
 
 module.exports = model;
