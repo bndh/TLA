@@ -6,6 +6,8 @@ const handleSubmissionDeny = require("../utility/discord/submissionsVeto/handleS
 const handleSubmissionApprove = require("../utility/discord/submissionsVeto/handleSubmissionApprove");
 const handleVetoPending = require("../utility/discord/submissionsVeto/handleVetoPending");
 
+const judgementEmojiCodes = process.env.JUDGEMENT_EMOJI_CODES.split(", ");
+
 module.exports = {
 	name: Events.MessageReactionAdd,
 	execute(messageReaction, user) { // TODO: Some kind of caching issue here
@@ -32,8 +34,7 @@ async function handleSubmissionResponse(messageReaction, reactionChannel) {
 }
 
 function handleVetoResponse(messageReaction, reactionChannel) {
-	const judgementEmojis = process.env.JUDGEMENT_EMOJIS.split(", ");
-	if(!judgementEmojis.includes(messageReaction.emoji.name)) return;
+	if(!judgementEmojiCodes.includes(messageReaction.emoji.name)) return;
 	
 	const parentForum = reactionChannel.parent;
 	const pendingTagId = getTagByEmojiCode(parentForum, "‼️").id; // Used later
@@ -48,7 +49,7 @@ function handleVetoResponse(messageReaction, reactionChannel) {
 	count += messageReaction.count;
 	
 	if(count < process.env.VETO_THRESHOLD + 2) { // + 2 to account for the bot's reactions
-		const otherEmoji = judgementEmojis[(judgementEmojis.findIndex(element => element === messageReaction.emoji.name) + 1) % judgementEmojis.length];
+		const otherEmoji = judgementEmojiCodes[(judgementEmojiCodes.findIndex(element => element === messageReaction.emoji.name) + 1) % judgementEmojiCodes.length];
 		const otherReaction = messageReaction.message.reactions.resolve(otherEmoji);
 		count += otherReaction.count;
 		if(count < +process.env.VETO_THRESHOLD + 2) return;

@@ -3,6 +3,7 @@ const {SlashCommandBuilder, PermissionFlagsBits} = require("discord.js");
 
 const Judge = require("../../mongo/Judge");
 const Submission = require("../../mongo/Submission");
+const updateOrCreate = require("../../mongo/utility/updateOrCreate");
 
 module.exports = {
 	data: new SlashCommandBuilder()
@@ -31,7 +32,7 @@ module.exports = {
 
 		let forumStatuses; // The statuses corresponding with the submissions the judge should judge
 		if(judgeType === "nominator") forumStatuses = ["AWAITING VETO", "PENDING APPROVAL"];
-		else forumStatuses = ["AWAITING DECISION", "AWAITING VETO", "PENDING APPROVAL"];
+		else forumStatuses = ["AWAITING DECISION", "AWAITING VETO", "PENDING APPROVAL"]; // Admin
 		
 		const threadEntries = await Submission.enqueue(() => 
 			Submission.find({status: {$in: forumStatuses}})
@@ -41,18 +42,12 @@ module.exports = {
 		const threadIds = threadEntries.map(threadEntry => threadEntry.threadId);
 
 		// Saving to DB
-		const existingEntry = await Judge.enqueue(() => Judge.findOne({userId: registree.id}).exec());
-		if(!existingEntry) { // Create new entry
-			await Judge.enqueue(() => Judge.create({
-				userId: registree.id,
-				judgeType: judgeType,
-				unjudgedThreadIds: threadIds
-			}));
-		} else { // Update existing entry
-			existingEntry.judgeType = judgeType;
-			existingEntry.unjudgedThreadIds = threadIds;
-			await Judge.enqueue(() => existingEntry.save());
-		}
+		await updateOrCreate(
+			Judge,
+			{userId: registree.id},
+			{judgeType: judgeType, unjudgedThreadIds: threadIds},
+			{userId: registree.id, judgeType: judgeType, unjudgedThreadIds: threadIds}
+		);
 
 		await deferPromise;
 		interaction.editReply(`Successfully registered ${registree.toString()}, having appointed \`${threadIds.length}\` submission${threadIds.length === 1 ? "" : "s"}.`);

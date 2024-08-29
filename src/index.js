@@ -8,6 +8,8 @@ const Submission = require("./mongo/Submission");
 const getAllFilePaths = require("./utility/getAllFilePaths");
 const getLocalCommands = require("./utility/getLocalCommands");
 const handleVetoJudgement = require("./utility/discord/submissionsVeto/handleVetoJudgement");
+const getUnjudgedThreads = require("./utility/discord/threads/getUnjudgedThreads");
+const getAllThreads = require("./utility/discord/threads/getAllThreads");
 
 client = new Client({
 	intents: [
@@ -23,7 +25,6 @@ client = new Client({
 		Partials.Reaction
 	]
 });
-const Info = require("./mongo/Info");
 
 (async () => {
 	await mongoose.connect(process.env.MONGODB_URI);

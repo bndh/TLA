@@ -1,5 +1,9 @@
-module.exports = async (Model, target, alteration, creationDefault) => {
-	const response = await Model.updateOne(target, alteration).exec();
+module.exports = async (Model, target, alteration, creationDefault, synced = true) => { // Synced used for executor support
+	let response;
+	if(Model.enqueue && synced) response = await Model.enqueue(() => Model.updateOne(target, alteration).exec());
+	else response = await Model.updateOne(target, alteration).exec();
+
 	if(response.matchedCount !== 0) return;
-	await Model.create(creationDefault);
+	if(Model.enqueue && synced) await Model.enqueue(() => Model.create(creationDefault))
+	else await Model.create(creationDefault);
 }

@@ -16,8 +16,8 @@ const tallyReactions = require("../../utility/discord/reactions/tallyReactions")
 const handleVetoPending = require("../../utility/discord/submissionsVeto/handleVetoPending");
 const submissionLinkExists = require("../../utility/submissionLinkExists");
 
-const judgementEmojis = process.env.JUDGEMENT_EMOJIS.split(", ");
-const waitingEmojis = process.env.WAITING_EMOJIS.split(", ");
+const judgementEmojiCodes = process.env.JUDGEMENT_EMOJI_CODES.split(", ");
+const waitingEmojiCodes = process.env.WAITING_EMOJI_CODES.split(", ");
 // TODO SO MANY EDGE CASES FOR FORUM SYNC... LIST AND TRULY SORT
 module.exports = {
 	data: new SlashCommandBuilder()
@@ -133,12 +133,12 @@ async function handleJudgeSync(submissionsForum, vetoForum) {
 }
 
 async function handleVetoSync(vetoForum, vetoThreadPromise) {
-	const pendingTag = getTagByEmojiCode(vetoForum, waitingEmojis[1]);
+	const pendingTag = getTagByEmojiCode(vetoForum, waitingEmojiCodes[1]);
 	let tagMap = createIdTagMap(
-		getTagByEmojiCode(vetoForum, waitingEmojis[0]), 
+		getTagByEmojiCode(vetoForum, waitingEmojiCodes[0]), 
 		pendingTag, // Used later if the submission should be changed to pending 
-		getTagByEmojiCode(vetoForum, judgementEmojis[1]), 
-		getTagByEmojiCode(vetoForum, judgementEmojis[1])
+		getTagByEmojiCode(vetoForum, judgementEmojiCodes[1]), 
+		getTagByEmojiCode(vetoForum, judgementEmojiCodes[1])
 	);
 
 	const initialVetoThreads = await vetoThreadPromise;
@@ -188,7 +188,7 @@ async function handleVetoSync(vetoForum, vetoThreadPromise) {
 		
 		const appliedTag = tagMap.get(fetchedThread.appliedTags[0]);
 		if(appliedTag.name === "Awaiting Veto") { // We only care about Awaiting Veto because Approved/Denied have completed their lifecycle
-			const reactionCounts = await tallyReactions(starterMessage, [judgementEmojis[0], judgementEmojis[1]]);
+			const reactionCounts = await tallyReactions(starterMessage, [judgementEmojiCodes[0], judgementEmojiCodes[1]]);
 			if(reactionCounts[0] + reactionCounts[1] >= +process.env.VETO_THRESHOLD + 2) {
 				handleVetoPending(fetchedThread, pendingTag.id, starterMessage); // Updates entry
 			}
@@ -209,11 +209,11 @@ async function handleVetoSync(vetoForum, vetoThreadPromise) {
 }
 
 async function handleSubmissionSync(submissionsForum, submissionsThreadPromise) {
-	const approvedTag = getTagByEmojiCode(submissionsForum, judgementEmojis[0]);
+	const approvedTag = getTagByEmojiCode(submissionsForum, judgementEmojiCodes[0]);
 	const tagMap = createIdTagMap(
-		getTagByEmojiCode(submissionsForum, waitingEmojis[0]), 
+		getTagByEmojiCode(submissionsForum, waitingEmojiCodes[0]), 
 		approvedTag,
-		getTagByEmojiCode(submissionsForum, judgementEmojis[1])
+		getTagByEmojiCode(submissionsForum, judgementEmojiCodes[1])
 	);
 
 	const initialSubmissionsThreads = await submissionsThreadPromise;
@@ -267,7 +267,7 @@ async function handleSubmissionSync(submissionsForum, submissionsThreadPromise) 
 		
 		const appliedTag = tagMap.get(fetchedThread.appliedTags[0]);
 		if(appliedTag.name === "Awaiting Decision") {
-			const reactionCounts = await tallyReactions(starterMessage, [judgementEmojis[0], judgementEmojis[1]]);
+			const reactionCounts = await tallyReactions(starterMessage, [judgementEmojiCodes[0], judgementEmojiCodes[1]]);
 			if(reactionCounts[0] > reactionCounts[1]) {
 				await handleSubmissionApprove(fetchedThread, starterMessage);
 			} else if(reactionCounts[0] < reactionCounts[1]) {
@@ -290,8 +290,8 @@ async function updateJudges(judgeType, forums) {
 
 	for(const forum of forums) {
 		const judgedTagIds = [
-			getTagByEmojiCode(forum, judgementEmojis[0]).id,
-			getTagByEmojiCode(forum, judgementEmojis[1]).id
+			getTagByEmojiCode(forum, judgementEmojiCodes[0]).id,
+			getTagByEmojiCode(forum, judgementEmojiCodes[1]).id
 		];
 
 		const initialThreads = await getAllThreads(forum);
@@ -301,7 +301,7 @@ async function updateJudges(judgeType, forums) {
 			if(fetchedThread.appliedTags.some((appliedTag => judgedTagIds.includes(appliedTag)))) continue;
 
 			const starterMessage = await fetchedThread.fetchStarterMessage({cache: false, force: true}); // Reactions may not be cached so we force
-			const reactedUserIds = await getReactedUsers(starterMessage, judgementEmojis);
+			const reactedUserIds = await getReactedUsers(starterMessage, judgementEmojiCodes);
 
 			for(const judgeId of judgeMap.keys()) {
 				if(reactedUserIds.includes(judgeId)) continue;

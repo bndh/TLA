@@ -13,6 +13,14 @@ const judgeSchema = new mongoose.Schema({
 	unjudgedThreadIds: {
 		type: [String],
 		required: true
+	},
+	snapshotIntervalJudged: { // Number of submissions judged between last snapshot and the penultimate snapshot 
+		type: Number,
+		required: false
+	},
+	snapshotTotalUnjudged: { // Total number of submissions judged at last snapshot
+		type: Number,
+		required: false
 	}
 });
 
