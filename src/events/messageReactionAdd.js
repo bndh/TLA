@@ -1,12 +1,16 @@
 require("dotenv").config();
+
 const {Events} = require("discord.js");
+
 const Judge = require("../mongo/Judge");
+
 const getTagByEmojiCode = require("../utility/discord/threads/getTagByEmojiCode");
 const handleSubmissionDeny = require("../utility/discord/submissionsVeto/handleSubmissionDeny");
 const handleSubmissionApprove = require("../utility/discord/submissionsVeto/handleSubmissionApprove");
 const handleVetoPending = require("../utility/discord/submissionsVeto/handleVetoPending");
 
 const judgementEmojiCodes = process.env.JUDGEMENT_EMOJI_CODES.split(", ");
+const openEmojiCodes = process.env.OPEN_EMOJI_CODES.split(", ");
 
 module.exports = {
 	name: Events.MessageReactionAdd,
@@ -17,43 +21,49 @@ module.exports = {
 };
 
 async function handleIntactReaction(messageReaction, user) {
-	if(user.id === process.env.CLIENT_ID) return; // Seemed caching issue with .me so we use this instead
-	const forumChannel = messageReaction.message.channel.parent;
-	if(!forumChannel) return;
+	if(user.id === process.env.CLIENT_ID) return; // TODO: Seemed caching issue with .me so we use this instead
+	const forum = messageReaction.message.channel.parent;
+	if(!forum) return;
+	if(![process.env.VETO_FORUM_ID, process.env.SUBMISSIONS_FORUM_ID].includes(forum.id)) return;
 
-	const reactionChannel = messageReaction.message.channel;
-	if(forumChannel.id === process.env.SUBMISSIONS_FORUM_ID) await handleSubmissionResponse(messageReaction, reactionChannel);
-	else if(forumChannel.id === process.env.VETO_FORUM_ID) handleVetoResponse(messageReaction, reactionChannel);
-	
-	Judge.enqueue(() => Judge.updateOne({userId: user.id}, {$pull: {unjudgedThreadIds: reactionChannel.id}}).exec());
+	const submissionThread = messageReaction.message.channel;
+	if(forum.id === process.env.SUBMISSIONS_FORUM_ID) await handleSubmissionResponse(messageReaction, submissionThread);
+	else if(forum.id === process.env.VETO_FORUM_ID) handleVetoResponse(messageReaction, submissionThread, user);
 }
 
-async function handleSubmissionResponse(messageReaction, reactionChannel) {
-	if(messageReaction.emoji.name === "⛔") handleSubmissionDeny(reactionChannel);
-	else if(messageReaction.emoji.name === "✅") await handleSubmissionApprove(reactionChannel, messageReaction.message);
+async function handleSubmissionResponse(messageReaction, submissionThread) {
+	if(messageReaction.emoji.name === judgementEmojiCodes[0]) await handleSubmissionApprove(submissionThread, messageReaction.message);
+	else if(messageReaction.emoji.name === judgementEmojiCodes[1]) handleSubmissionDeny(submissionThread);
 }
 
-function handleVetoResponse(messageReaction, reactionChannel) {
+function handleVetoResponse(messageReaction, submissionThread, judge) {
 	if(!judgementEmojiCodes.includes(messageReaction.emoji.name)) return;
-	
-	const parentForum = reactionChannel.parent;
-	const pendingTagId = getTagByEmojiCode(parentForum, "‼️").id; // Used later
-	const targetTagIds = [
-		pendingTagId,
-		getTagByEmojiCode(parentForum, "✅").id,
-		getTagByEmojiCode(parentForum, "⛔").id
-	];
-	if(reactionChannel.appliedTags.some(appliedTag => targetTagIds.includes(appliedTag))) return; // We know that pending threads only change after a set amount of time, not after a certain number of emojis
 
-	let count = 0;
-	count += messageReaction.count;
+	const forum = submissionThread.parent;
 	
-	if(count < process.env.VETO_THRESHOLD + 2) { // + 2 to account for the bot's reactions
-		const otherEmoji = judgementEmojiCodes[(judgementEmojiCodes.findIndex(element => element === messageReaction.emoji.name) + 1) % judgementEmojiCodes.length];
-		const otherReaction = messageReaction.message.reactions.resolve(otherEmoji);
-		count += otherReaction.count;
-		if(count < +process.env.VETO_THRESHOLD + 2) return;
+	const closedTagIds = judgementEmojiCodes.map(emojiCode => getTagByEmojiCode(forum, emojiCode).id);
+	if(submissionThread.appliedTags.some(appliedTagId => closedTagIds.includes(appliedTagId))) return; // Indicates that the submission is closed and any additional reaction would not have an effect
+
+	Judge.enqueue(() => Judge.updateOne({userId: judge.id}, {$push: {counselledSubmissionIds: submissionThread.id}}));
+
+	const pendingTagId = getTagByEmojiCode(forum, openEmojiCodes[1]).id; 
+	if(submissionThread.appliedTags.some(appliedTagId => appliedTagId === pendingTagId)) return; // Indicates that the thread is pending, which this reaction should not affect for they close after a set amount of time
+
+	if(meetsReactionThreshold(messageReaction, messageReaction.message)) {
+		handleVetoPending(submissionThread, pendingTagId, messageReaction.message);
 	}
-	
-	handleVetoPending(reactionChannel, pendingTagId, messageReaction.message);
+}
+
+function meetsReactionThreshold(messageReaction, message) {
+	let count = messageReaction.count;
+
+	if(count >= +process.env.VETO_THRESHOLD + 2) return true; // + 2 to account for the bot's reactions
+
+	const emojiCodeIndex = judgementEmojiCodes.findIndex(element => element === messageReaction.emoji.name);
+	const otherEmojiCode = judgementEmojiCodes[(emojiCodeIndex + 1) % judgementEmojiCodes.length]; // Increment to find the other judgement emoji
+	const otherReaction = message.reactions.resolve(otherEmojiCode);
+	count += otherReaction.count;
+
+	if(count >= +process.env.VETO_THRESHOLD + 2) return true;
+	else return false;
 }

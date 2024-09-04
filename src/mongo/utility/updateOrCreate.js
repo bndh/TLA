@@ -7,3 +7,5 @@ module.exports = async (Model, target, alteration, creationDefault, synced = tru
 	if(Model.enqueue && synced) await Model.enqueue(() => Model.create(creationDefault))
 	else await Model.create(creationDefault);
 }
+
+// TODO PREDICTIVE CREATION DEFAULT is a good idea

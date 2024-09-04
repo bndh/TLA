@@ -17,7 +17,7 @@ const handleVetoPending = require("../../utility/discord/submissionsVeto/handleV
 const submissionLinkExists = require("../../utility/submissionLinkExists");
 
 const judgementEmojiCodes = process.env.JUDGEMENT_EMOJI_CODES.split(", ");
-const waitingEmojiCodes = process.env.WAITING_EMOJI_CODES.split(", ");
+const openEmojiCodes = process.env.OPEN_EMOJI_CODES.split(", ");
 // TODO SO MANY EDGE CASES FOR FORUM SYNC... LIST AND TRULY SORT
 module.exports = {
 	data: new SlashCommandBuilder()
@@ -133,9 +133,9 @@ async function handleJudgeSync(submissionsForum, vetoForum) {
 }
 
 async function handleVetoSync(vetoForum, vetoThreadPromise) {
-	const pendingTag = getTagByEmojiCode(vetoForum, waitingEmojiCodes[1]);
+	const pendingTag = getTagByEmojiCode(vetoForum, openEmojiCodes[1]);
 	let tagMap = createIdTagMap(
-		getTagByEmojiCode(vetoForum, waitingEmojiCodes[0]), 
+		getTagByEmojiCode(vetoForum, openEmojiCodes[0]), 
 		pendingTag, // Used later if the submission should be changed to pending 
 		getTagByEmojiCode(vetoForum, judgementEmojiCodes[1]), 
 		getTagByEmojiCode(vetoForum, judgementEmojiCodes[1])
@@ -211,7 +211,7 @@ async function handleVetoSync(vetoForum, vetoThreadPromise) {
 async function handleSubmissionSync(submissionsForum, submissionsThreadPromise) {
 	const approvedTag = getTagByEmojiCode(submissionsForum, judgementEmojiCodes[0]);
 	const tagMap = createIdTagMap(
-		getTagByEmojiCode(submissionsForum, waitingEmojiCodes[0]), 
+		getTagByEmojiCode(submissionsForum, openEmojiCodes[0]), 
 		approvedTag,
 		getTagByEmojiCode(submissionsForum, judgementEmojiCodes[1])
 	);

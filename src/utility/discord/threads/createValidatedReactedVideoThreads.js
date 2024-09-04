@@ -7,7 +7,7 @@ const createThreadAndReact = require("./createThreadAndReact");
 const getTagByEmojiCode = require("./getTagByEmojiCode");
 const submissionLinkExists = require("../../submissionLinkExists");
 
-module.exports = async (videoLinks, forum, judgeTypes) => {
+module.exports = async (videoLinks, forum) => {
 	const status = forum.id === process.env.SUBMISSIONS_FORUM_ID ? "AWAITING DECISION" : "AWAITING VETO";
 
 	for(const videoLink of videoLinks) {
@@ -21,6 +21,5 @@ module.exports = async (videoLinks, forum, judgeTypes) => {
 			videoLink: videoLink, 
 			status: status
 		})); // Enqueue will ensure that this happens in order
-		Judge.enqueue(() => Judge.updateMany({judgeType: {$in: judgeTypes}}, {$push: {unjudgedThreadIds: thread.id}}).exec());
 	}
 }

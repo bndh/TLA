@@ -10,6 +10,7 @@ const getLocalCommands = require("./utility/getLocalCommands");
 const handleVetoJudgement = require("./utility/discord/submissionsVeto/handleVetoJudgement");
 const getUnjudgedThreads = require("./utility/discord/threads/getUnjudgedThreads");
 const getAllThreads = require("./utility/discord/threads/getAllThreads");
+const hasReacted = require("./utility/discord/reactions/hasReacted");
 
 client = new Client({
 	intents: [
@@ -28,7 +29,9 @@ client = new Client({
 
 (async () => {
 	await mongoose.connect(process.env.MONGODB_URI);
-	console.log("Connected to Mongoose!");	
+	console.log("Connected to Mongoose!");
+
+	// Submission.findByIdAndUpdate("66cef8a96141a1b2905e2c60", {$inc: {"threadId": 100}}).exec();
 
 	loadCommands();
 	registerListeners();
@@ -83,6 +86,7 @@ async function startPendingCountdowns() {
 }
 
 async function checkChannel(channelId, channelName) {
-	client.channels.fetch(channelId)
+	client.channels
+		.fetch(channelId)
 		.catch(() => console.error(`Channel "${channelName}" ("${channelId}") not found! \nIt is strongly advised to set this .env value and restart.`));
 }

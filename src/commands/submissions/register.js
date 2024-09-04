@@ -1,9 +1,16 @@
 require("dotenv").config();
+
 const {SlashCommandBuilder, PermissionFlagsBits} = require("discord.js");
 
 const Judge = require("../../mongo/Judge");
 const Submission = require("../../mongo/Submission");
 const updateOrCreate = require("../../mongo/utility/updateOrCreate");
+const getAllThreads = require("../../utility/discord/threads/getAllThreads");
+const getTagByEmojiCode = require("../../utility/discord/threads/getTagByEmojiCode");
+const hasReacted = require("../../utility/discord/reactions/hasReacted");
+
+const judgementEmojiCodes = process.env.JUDGEMENT_EMOJI_CODES.split(", ");
+const vowels = ["A", "E", "I", "O", "U"];
 
 module.exports = {
 	data: new SlashCommandBuilder()
@@ -30,26 +37,60 @@ module.exports = {
 		const registree = interaction.options.getUser("registree", true);
 		const judgeType = interaction.options.getString("judge-type", true);
 
-		let forumStatuses; // The statuses corresponding with the submissions the judge should judge
-		if(judgeType === "nominator") forumStatuses = ["AWAITING VETO", "PENDING APPROVAL"];
-		else forumStatuses = ["AWAITING DECISION", "AWAITING VETO", "PENDING APPROVAL"]; // Admin
-		
-		const threadEntries = await Submission.enqueue(() => 
-			Submission.find({status: {$in: forumStatuses}})
-					  .select({threadId: 1, _id: 0})
-					  .exec()
-		);
-		const threadIds = threadEntries.map(threadEntry => threadEntry.threadId);
+		let forumIds;
+		if(judgeType === "nominator") forumIds = [process.env.VETO_FORUM_ID];
+		else forumIds = [process.env.VETO_FORUM_ID, process.env.SUBMISSIONS_FORUM_ID];
+		const forums = await Promise.all(forumIds.map(forumId => interaction.client.channels.fetch(forumId)));
 
-		// Saving to DB
-		await updateOrCreate(
+		const {counselledSubmissionIds, totalSubmissionsClosed} = await tallyRegistreeSubmissions(forums, registree.id);
+
+		const documentPromise = updateOrCreate(
 			Judge,
 			{userId: registree.id},
-			{judgeType: judgeType, unjudgedThreadIds: threadIds},
-			{userId: registree.id, judgeType: judgeType, unjudgedThreadIds: threadIds}
+			{$set: {judgeType: judgeType, counselledSubmissionIds: counselledSubmissionIds, totalSubmissionsClosed: totalSubmissionsClosed},
+			 $unset: {snappedJudgedInterval: 1, snappedJudgedTotal: 1}},
+			{userId: registree.id, judgeType: judgeType, counselledSubmissionIds: counselledSubmissionIds, totalSubmissionsClosed: totalSubmissionsClosed}
 		);
 
-		await deferPromise;
-		interaction.editReply(`Successfully registered ${registree.toString()}, having appointed \`${threadIds.length}\` submission${threadIds.length === 1 ? "" : "s"}.`);
+		const typeString = "a" 
+						 + (vowels.includes(judgeType.substring(0, 1).toUpperCase()) ? "n " : " ") 
+						 + judgeType.substring(0, 1).toUpperCase() 
+						 + judgeType.substring(1);
+		await Promise.all([deferPromise, documentPromise]);
+		interaction.editReply(`Successfully registered ${registree.toString()} as \`${typeString}\`!`);
 	}
 };
+
+async function tallyRegistreeSubmissions(forums, registreeId) {
+	const counselledSubmissionIds = [];
+	let totalSubmissionsClosed = 0;
+
+	const threadGroups = await Promise.all(forums.map(forum => getAllThreads(forum)));
+	const tallyPromises = [threadGroups.reduce((accumulator, threadGroup) => accumulator + threadGroup.size, 0)]
+	for(const threads of threadGroups) {
+		if(threads.size === 0) continue;
+		const forum = threads.at(0).parent;
+		const closedTagIds = judgementEmojiCodes.map(emojiCode => getTagByEmojiCode(forum, emojiCode).id);
+
+		for(let i = 0; i < threads.size; i++) {
+			tallyPromises[i] = new Promise(async resolve => {
+				const thread = threads.at(i);
+				const starterMessage = await thread.fetchStarterMessage();
+	
+				const reacted = await hasReacted(starterMessage, registreeId, judgementEmojiCodes);
+				if(reacted) {
+					const threadClosed = closedTagIds.includes(thread.appliedTags[0]);
+					if(threadClosed) totalSubmissionsClosed++;
+					else counselledSubmissionIds.push(thread.id);
+				}
+				resolve();
+			});
+		}
+	}
+
+	await Promise.all(tallyPromises);
+	return {
+		counselledSubmissionIds: counselledSubmissionIds, 
+		totalSubmissionsClosed: totalSubmissionsClosed
+	};
+}
