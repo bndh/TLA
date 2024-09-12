@@ -36,7 +36,6 @@ module.exports = async (client, submissionThreadId) => { // Use ids as it will b
 		{$pull: {counselledSubmissionIds: submissionThreadId}, $inc: {"totalSubmissionsClosed": 1}}
 	).exec());
 	
-	Judge.enqueue(() => Judge.updateMany({}, {$pull: {unjudgedThreadIds: submissionThreadId}}).exec());
 	Submission.enqueue(() => Submission.updateOne({threadId: submissionThreadId}, {$set: {status: decisionTag.name}, $unset: {expirationTime: 1}}).exec());
 }
 

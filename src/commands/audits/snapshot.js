@@ -10,7 +10,7 @@ const updateOrCreate = require("../../mongo/utility/updateOrCreate");
 // TODO further investigate Client
 module.exports = {
 	data: new SlashCommandBuilder()
-		.setName("take-snapshot")
+		.setName("snapshot")
 		.setDescription("Overwrite the previous audit data with the current system state.")
 		.addBooleanOption(optionBuilder => optionBuilder
 			.setName("lossless")
@@ -72,7 +72,7 @@ async function updateSubmissionCountInfo(client) {
 }
 
 async function snapshotJudges() {
-	const judgeDocuments = await Judge.enqueue(() => Judge.find({}));
+	const judgeDocuments = await Judge.enqueue(() => Judge.find({}).exec());
 
 	const savePromises = [judgeDocuments.length];
 	for(let i = 0; i < judgeDocuments.length; i++) {

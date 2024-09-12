@@ -52,10 +52,10 @@ module.exports = {
 			{userId: registree.id, judgeType: judgeType, counselledSubmissionIds: counselledSubmissionIds, totalSubmissionsClosed: totalSubmissionsClosed}
 		);
 
-		const typeString = "a" 
-						 + (vowels.includes(judgeType.substring(0, 1).toUpperCase()) ? "n " : " ") 
-						 + judgeType.substring(0, 1).toUpperCase() 
-						 + judgeType.substring(1);
+		const firstCharacterCaps = judgeType.substring(0, 1).toUpperCase;
+		const typeString = "a" + (vowels.includes(firstCharacterCaps) ? "n" : "") + // a/an
+						   " " +
+						   firstCharacterCaps + judgeType.substring(1); // judgeType capitalised
 		await Promise.all([deferPromise, documentPromise]);
 		interaction.editReply(`Successfully registered ${registree.toString()} as \`${typeString}\`!`);
 	}
