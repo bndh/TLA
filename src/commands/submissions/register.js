@@ -52,7 +52,7 @@ module.exports = {
 			{userId: registree.id, judgeType: judgeType, counselledSubmissionIds: counselledSubmissionIds, totalSubmissionsClosed: totalSubmissionsClosed}
 		);
 
-		const firstCharacterCaps = judgeType.substring(0, 1).toUpperCase;
+		const firstCharacterCaps = judgeType.substring(0, 1).toUpperCase();
 		const typeString = "a" + (vowels.includes(firstCharacterCaps) ? "n" : "") + // a/an
 						   " " +
 						   firstCharacterCaps + judgeType.substring(1); // judgeType capitalised

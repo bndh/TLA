@@ -6,8 +6,10 @@ const Info = require("../../mongo/Info");
 const Judge = require("../../mongo/Judge");
 const getAllThreads = require("../../utility/discord/threads/getAllThreads");
 const capitalise = require("../../utility/capitalise");
-const Coloriser = require("../../utility/coloriser");
-
+const Coloriser = require("../../utility/Coloriser");
+const TextFormatter = require("../../utility/TextFormatter");
+// TODO check code considering falsy 0
+// TODO consider changing interim resolution to 5 places
 module.exports = {
 	data: new SlashCommandBuilder()
 		.setName("audit")
@@ -20,67 +22,6 @@ module.exports = {
 		.setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 	async execute(interaction) {
 		const deferPromise = interaction.deferReply();
-		
-	// 	const overwrite = interaction.options.getBoolean("overwrite", false) ?? true;
-		
-	// 	const forums = await Promise.all([
-	// 		interaction.client.channels.fetch(process.env.SUBMISSIONS_FORUM_ID),
-	// 		interaction.client.channels.fetch(process.env.VETO_FORUM_ID)
-	// 	]);
-
-	// 	const forumThreads = await Promise.all(forums.map(forum => getAllThreads(forum)));
-	// 	const forumCounts = forumThreads.map(threads => threads.size); // getAllThreads(...) returns a collection
-
-	// 	const snapshotCounts = await Promise.all([
-	// 		Info.findOne({id: "snappedSubmissionsCount"}).select({data: 1, _id: 0}).exec(),
-	// 		Info.findOne({id: "snappedVetoCount"}).select({data: 1, _id: 0}).exec()
-	// 	]);
-	// 	const snapshotCreationInfo = await Info.findOne({id: "snapshotCreationTime"}).select({data: 1, _id: 0}).exec();
-	// 	const snapshotCreationTime = +snapshotCreationInfo.data;
-
-	// 	let auditString = "**__*AUDIT INFO*__**" +
-	// 						"\n" + 
-	// 						"_" + 
-	// 						time(new Date(snapshotCreationTime), TimestampStyles.LongDate) + 
-	// 						" -> " + 
-	// 						time(new Date(Date.now()), TimestampStyles.LongDate) +
-	// 						"_\n\n";
-		
-	// 	const judgeDocuments = await Judge.enqueue(() => Judge.find({}));
-	// 	for(let i = 0; i < judgeDocuments.length; i++) {
-	// 		const user = await interaction.client.users.fetch(judgeDocuments[i].userId);
-	// 		const currentJudgedTotal = judgeDocuments[i].counselledSubmissionIds.length + judgeDocuments[i].totalSubmissionsClosed;
-
-	// 		let introString = "`" + capitalise(judgeDocuments[i].judgeType) + "` " + 
-	// 						  user.toString() +
-	// 						  " judged `" + currentJudgedTotal;
-
-	// 		let performanceString;
-	// 		if(judgeDocuments[i].snappedJudgedInterval) { // Conventional flow; not a new judge
-	// 			const judgedInInterval = currentJudgedTotal - judgeDocuments[i].snappedJudgedTotal;
-	// 			let changeString;
-	// 			if(judgeDocuments[i].snappedJudgedInterval != 0) {
-	// 				let intervalChange = judgedInInterval / judgeDocuments[i].snappedJudgedInterval * 100;
-	// 				intervalChange = Math.round((intervalChange + Number.EPSILON) * 10) / 10; // 1dp
-	// 				changeString = " (" + intervalChange + "%" + " " + (intervalChange >= 0 ? intervalChange > 0 ? "⬆️" : "↕️" : "⬇️") + ")";
-	// 			} else {
-	// 				changeString = " (∞%⬆️)";
-	// 			}
-				
-
-	// 			performanceString = changeString + " submissions` since last audit";
-	// 		} else { // New Judge
-	// 			introString = introString.padStart(introString.length + 11, "**_NEW_**  ");
-	// 			performanceString = " submissions` since being appointed";
-	// 		}
-			
-	// 		let totalVisibleSubmissions;
-	// 		if(judgeDocuments[i].judgeType === "nominator") totalVisibleSubmissions = forumCounts[1];
-	// 		else if(judgeDocuments[i].judgeType === "admin") totalVisibleSubmissions = forumCounts.reduce((accumulator, count) => accumulator + count); // Every forum
-	// 		else continue; // Unknown type
-
-	// 		auditString += introString + performanceString + ", with `" + totalVisibleSubmissions + " submissions` left to judge in total.\n";
-	// 	}
 
 		const auditEmbed = await generateAuditEmbed(interaction.client);
 
@@ -96,6 +37,10 @@ async function generateAuditEmbed(client) {
 		.setFooter({text: "Page 1 of 10", iconURL: "https://images.emojiterra.com/twitter/v14.0/512px/1f4c4.png"})
 		.setColor(process.env.AUDIT_COLOR)
 		.setDescription(await generateDescriptionText(client));
+}
+
+function generateActionRow() {
+
 }
 
 function snapshotJudgeData() {
@@ -151,57 +96,29 @@ function attachIntervalAndTotalProperties(judgeDocuments) {
 }
 
 function sortJudgeDocuments(judgeDocuments) {
-	return judgeDocuments.sort((docA, docB) => docA.judgedInInterval - docB.judgedInInterval);
+	return judgeDocuments.sort((docA, docB) => docB.judgedInInterval - docA.judgedInInterval);
 }
 
 function attachIntervalChange(judgeDocument) { // % change compared to last judgedInInterval value
-	if(judgeDocument.snappedJudgedInterval) {
-		if(judgeDocument.snappedJudgedInterval != 0) {
+	if(judgeDocument.snappedJudgedInterval !== undefined) {
+		if(judgeDocument.snappedJudgedInterval !== 0) {
 			judgeDocument.intervalChange = judgeDocument.judgedInInterval / judgeDocument.snappedJudgedInterval * 100; // %
 			judgeDocument.intervalChange = -100 + judgeDocument.intervalChange; // % change (e.g. 4n, 16b = -75%; 28n, 16b = +75%)
 			judgeDocument.intervalChange = Math.min(Math.max(judgeDocument.intervalChange, -1000), 1000); // Snap between -1000 and 1000; becomes 999+%
 		} else {
-			judgeDocument.intervalChange = 1001; // Unique placeholder value: ∞%
+			if(judgeDocument.judgedInInterval === 0) judgeDocument.intervalChange = 0; // 0 judged before, 0 judged now, hence 0
+			else judgeDocument.intervalChange = 1000; // ∞ symbol looks too sad so we just say >999
 		}
 	} else {
-		judgeDocument.intervalChange = -1001; // Unique placeholder value: N/A%
+		judgeDocument.intervalChange = "N/A"; // Unique placeholder value: N/A%
 	}
 }
 
-async function generateTableRow(sortedIndex, modifiedJudgeDoc, client) {
-	let indexText = resizeEnd(sortedIndex.toString(), 3, " ", "..");
-	if(sortedIndex <= 5) indexText = Coloriser.color(indexText, sortedIndex); // If it's >5, it will be coloured the same as the pipe (grey) which is appropriate
-
-	const user = await client.users.fetch(modifiedJudgeDoc.userId);
-	let userColorCode = 7;
-	if(modifiedJudgeDoc.judgeType === "admin") userColorCode = +process.env.ADMIN_COLOR_CODE;
-	else if(modifiedJudgeDoc.judgeType === "nominator") userColorCode = +process.env.NOMINATOR_COLOR_CODE;
-	let usernameText = resizeEnd(user.username, 16, " ", "..");
-	usernameText = Coloriser.color(usernameText, userColorCode);
-
-	let quantityText;
-	if(modifiedJudgeDoc.judgedInInterval >= 1000) quantityText = ">999";
-	else quantityText = modifiedJudgeDoc.judgedInInterval.toString();
-	quantityText = resizeEnd(quantityText, 4);
-
-	let changeText;
-	if(Math.abs(modifiedJudgeDoc.intervalChange) >= 1000) changeText = ">999";
-	else changeText = modifiedJudgeDoc.intervalChange.toString();
-	changeText = resizeFront(changeText, 4, " ");
-	const changeTextColor = modifiedJudgeDoc.intervalChange >= 0 ? modifiedJudgeDoc.intervalChange > 0 ? "GREEN" : "YELLOW" : "RED"; 
-
-	let interimText = quantityText + " (" + changeText + "%)";
-	interimText = resizeEnd(interimText, 19);
-	interimText = Coloriser.colorIndices(
-		interimText, 
-		[0, quantityText.length + 2, quantityText.length + 2 + changeText.length + 1], 
-		["WHITE", changeTextColor, "WHITE"]
-	);
-	
-	let totalText = modifiedJudgeDoc.currentJudgedTotal.toString();
-	if(modifiedJudgeDoc.currentJudgedTotal >= 10000) totalText = "9999+"; // In some insane universe
-	totalText = resizeEnd(totalText, 5);
-	totalText = Coloriser.color(totalText, "WHITE");
+async function generateTableRow(index, modifiedJudgeDoc, client) {
+	let indexText = generateIndexText(index);
+	let usernameText = await generateUserText(modifiedJudgeDoc, client);
+	let interimText = generateInterimText(modifiedJudgeDoc);
+	let totalText = generateTotalText(modifiedJudgeDoc);
 
 	const divider = Coloriser.color("|", "GREY");
 	return `${divider} ${indexText} ${divider} ${usernameText} ${divider} ${interimText} ${divider} ${totalText} ${divider}`;
@@ -211,35 +128,72 @@ function generateSubmissionTableText() {
 
 }
 
-function generateActionRow() {
-
+function generateIndexText(index) {
+	let indexText = TextFormatter.resizeEnd(index.toString(), 3, " ", "..");
+	if(index <= 5) indexText = Coloriser.color(indexText, index); // If it's >5, it will be coloured the same as the pipe (grey) which is appropriate
+	return indexText;
 }
 
-function resizeFront(text, targetLength, fillerReplacement = " ", excessReplacement = "") {
-	if(text.length < targetLength) return text.padStart(targetLength, fillerReplacement);
-	if(text.length > targetLength) return decapitate(text, targetLength, excessReplacement);
-	return text;
-	
+async function generateUserText(modifiedJudgeDoc, client) {
+	const user = await client.users.fetch(modifiedJudgeDoc.userId);
+	let userColorCode = 7;
+	if(modifiedJudgeDoc.judgeType === "admin") userColorCode = +process.env.ADMIN_COLOR_CODE;
+	else if(modifiedJudgeDoc.judgeType === "nominator") userColorCode = +process.env.NOMINATOR_COLOR_CODE;
+	let usernameText = TextFormatter.resizeEnd(user.username, 16, " ", "..");
+	return Coloriser.color(usernameText, userColorCode);
 }
 
-function resizeEnd(text, targetLength, fillerReplacement = " ", excessReplacement = "") {
-	if(text.length < targetLength) return text.padEnd(targetLength, fillerReplacement);
-	if(text.length > targetLength) return abbreviate(text, targetLength, excessReplacement);
-	return text;
+function generateInterimText(modifiedJudgeDoc) {
+	let quantityText;
+	if(modifiedJudgeDoc.judgedInInterval >= 1000) quantityText = ">999";
+	else quantityText = modifiedJudgeDoc.judgedInInterval.toString();
+	const properQuantityLength = quantityText.length; // Used later for colouring
+	quantityText = TextFormatter.resizeFront(quantityText, 4, "0");
+
+	let changeText;
+	let changeTextColor;
+	let properChangeLength;
+	if(typeof modifiedJudgeDoc.intervalChange === "number") {
+		if(Math.abs(modifiedJudgeDoc.intervalChange) >= 1000) changeText = ">999";
+		else changeText = Math.round(Math.abs(modifiedJudgeDoc.intervalChange)).toString(); // Significance indicated by colour
+		properChangeLength = changeText.length; // Used later for colouring
+		changeText = TextFormatter.resizeFront(changeText, 4, "0");
+		changeTextColor = modifiedJudgeDoc.intervalChange >= 0 ? modifiedJudgeDoc.intervalChange > 0 ? "GREEN" : "YELLOW" : "RED";
+	} else {
+		changeText = modifiedJudgeDoc.intervalChange;
+		properChangeLength = modifiedJudgeDoc.intervalChange.length;
+		if(changeText === "∞") changeTextColor = "GREEN";
+		else if(changeText === "N/A") changeTextColor = "YELLOW";
+		changeText = TextFormatter.resizeFront(changeText, 4, " ");
+	}
+
+	let interimText = quantityText + "   (" + changeText + "%)";
+	interimText = TextFormatter.resizeEnd(interimText, 19);
+	interimText = Coloriser.colorIndices(
+		interimText,
+		[
+			0, // Leading 0s
+			4 - properQuantityLength, // Quantity value
+			6, // Leading % bracket and 0s
+			8 + (4 - properChangeLength), // Change value
+			13 // Closing bracket
+		],
+		[
+			"GREY",
+			"WHITE",
+			"GREY",
+			changeTextColor,
+			"GREY"
+		]
+	);
+	return interimText;
 }
 
-function decapitate(text, maxLength, replacement = "..") { // Amusing but sensible
-	if(text.length <= maxLength) return text;
-
-	const excess = text.length - maxLength;
-	text = text.slice(excess + replacement.length);
-	return replacement + text;
-}
-
-function abbreviate(text, maxLength, replacement = "..") {
-	if(text.length <= maxLength) return text;
-
-	const excess = text.length - maxLength;
-	text = text.slice(0, -(excess + replacement.length));
-	return text + replacement;
+function generateTotalText(modifiedJudgeDoc) {
+	let totalText = modifiedJudgeDoc.currentJudgedTotal.toString();
+	if(modifiedJudgeDoc.currentJudgedTotal >= 10000) totalText = "9999+"; // In some insane universe
+	const properTotalLength = totalText.length;
+	totalText = TextFormatter.resizeFront(totalText, 5, "0");
+	totalText = Coloriser.colorIndices(totalText, [0, 5 - properTotalLength], ["GREY", "WHITE"]);
+	return totalText;
 }

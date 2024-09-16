@@ -12,8 +12,8 @@ const getUnjudgedThreads = require("./utility/discord/threads/getUnjudgedThreads
 const getAllThreads = require("./utility/discord/threads/getAllThreads");
 const hasReacted = require("./utility/discord/reactions/hasReacted");
 const capitalise = require("./utility/capitalise");
-const color = require("./utility/coloriser");
-const Coloriser = require("./utility/coloriser");
+const color = require("./utility/Coloriser");
+const Coloriser = require("./utility/Coloriser");
 
 client = new Client({
 	intents: [
