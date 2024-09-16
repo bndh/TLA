@@ -5,7 +5,7 @@ const {Events} = require("discord.js");
 const Judge = require("../mongo/Judge");
 
 const getTagByEmojiCode = require("../utility/discord/threads/getTagByEmojiCode");
-const handleSubmissionDeny = require("../utility/discord/submissionsVeto/handleSubmissionDeny");
+const handleSubmissionReject = require("../utility/discord/submissionsVeto/handleSubmissionReject");
 const handleSubmissionApprove = require("../utility/discord/submissionsVeto/handleSubmissionApprove");
 const handleVetoPending = require("../utility/discord/submissionsVeto/handleVetoPending");
 
@@ -33,7 +33,7 @@ async function handleIntactReaction(messageReaction, user) {
 
 async function handleSubmissionResponse(messageReaction, submissionThread) {
 	if(messageReaction.emoji.name === judgementEmojiCodes[0]) await handleSubmissionApprove(submissionThread, messageReaction.message);
-	else if(messageReaction.emoji.name === judgementEmojiCodes[1]) handleSubmissionDeny(submissionThread);
+	else if(messageReaction.emoji.name === judgementEmojiCodes[1]) handleSubmissionReject(submissionThread);
 }
 
 function handleVetoResponse(messageReaction, submissionThread, judge) {

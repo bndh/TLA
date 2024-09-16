@@ -14,6 +14,7 @@ const hasReacted = require("./utility/discord/reactions/hasReacted");
 const capitalise = require("./utility/capitalise");
 const color = require("./utility/Coloriser");
 const Coloriser = require("./utility/Coloriser");
+const TextFormatter = require("./utility/TextFormatter");
 
 client = new Client({
 	intents: [

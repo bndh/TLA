@@ -27,6 +27,19 @@ class TextFormatter {
 		text = text.slice(0, -(excess + replacement.length));
 		return text + replacement;
 	}
+
+	static insertAtCenter(text, field) {
+		const startIndex = this.findCenteredStartIndex(text.length, field.length);
+		return field.substring(0, startIndex) +
+			   text +
+			   field.substring(startIndex + text.length);
+	}
+
+	static findCenteredStartIndex(textLength, fieldLength) {
+		const center = Math.ceil(fieldLength / 2);
+		const start = center - Math.ceil(textLength / 2);
+		return start;
+	}
 }
 
 module.exports = TextFormatter;

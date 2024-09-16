@@ -11,7 +11,7 @@ const fetchMessages = require("../../utility/discord/messages/fetchMessages");
 const getVideosFromMessage = require("../../utility/discord/messages/getVideosFromMessage");
 const createReactedThreadsFromVideos = require("../../utility/discord/threads/createReactedThreadsFromVideos");
 const handleSubmissionApprove = require("../../utility/discord/submissionsVeto/handleSubmissionApprove");
-const handleSubmissionDeny = require("../../utility/discord/submissionsVeto/handleSubmissionDeny");
+const handleSubmissionReject = require("../../utility/discord/submissionsVeto/handleSubmissionReject");
 const tallyReactions = require("../../utility/discord/reactions/tallyReactions");
 const handleVetoPending = require("../../utility/discord/submissionsVeto/handleVetoPending");
 const submissionLinkExists = require("../../utility/submissionLinkExists");
@@ -271,7 +271,7 @@ async function handleSubmissionSync(submissionsForum, submissionsThreadPromise) 
 			if(reactionCounts[0] > reactionCounts[1]) {
 				await handleSubmissionApprove(fetchedThread, starterMessage);
 			} else if(reactionCounts[0] < reactionCounts[1]) {
-				handleSubmissionDeny(fetchedThread);
+				handleSubmissionReject(fetchedThread);
 			}
 		} else {
 			entry.status = appliedTag.name;

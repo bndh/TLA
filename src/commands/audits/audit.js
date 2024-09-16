@@ -4,10 +4,14 @@ const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, time, TimestampS
 
 const Info = require("../../mongo/Info");
 const Judge = require("../../mongo/Judge");
+const Submission = require("../../mongo/Submission");
 const getAllThreads = require("../../utility/discord/threads/getAllThreads");
 const capitalise = require("../../utility/capitalise");
 const Coloriser = require("../../utility/Coloriser");
 const TextFormatter = require("../../utility/TextFormatter");
+
+const DIVIDER = Coloriser.color("│", "GREY");
+
 // TODO check code considering falsy 0
 // TODO consider changing interim resolution to 5 places
 module.exports = {
@@ -40,7 +44,7 @@ async function generateAuditEmbed(client) {
 }
 
 function generateActionRow() {
-
+	// help button, e.g. sizing not working (turn off member preview/go on pc), coloring not working, etc.
 }
 
 function snapshotJudgeData() {
@@ -48,32 +52,46 @@ function snapshotJudgeData() {
 }
 
 async function generateDescriptionText(client) {
+	const descriptionParts = await Promise.all([
+		generateDateText(),
+		generateJudgeTableBlock(client),
+		generateSubmissionTableBlock(),
+		generateTotalBlock()
+	]);
+	const dateText = descriptionParts[0];
+	const judgeTableEmbed = descriptionParts[1];
+	const submissionTableEmbed = descriptionParts[2];
+	const totalEmbed = descriptionParts[3];
+
+	return dateText + "\n" +
+		   "**" + judgeTableEmbed + "** " +  // Lack of \n packs them close together but still on different lines; space included after the double asterisk or they conflict
+		   "**" + submissionTableEmbed + "** " +
+		   "_" + totalEmbed + "_";
+	}
+
+async function generateDateText() {
 	const snapshotCreationInfo = await Info.findOne({id: "snapshotCreationTime"}).select({data: 1, _id: 0}).exec();
 	const snapshotCreationTime = +snapshotCreationInfo.data;
 
-	const judgeDocuments = await Judge.enqueue(() => Judge.find({}));
-
-	return generateDateText(snapshotCreationTime) + "\n" +
-		   await generateJudgeTableText(judgeDocuments, client);
-}
-
-function generateDateText(snapshotCreationTime) {
 	const formattedSnapshotTime = time(new Date(snapshotCreationTime), TimestampStyles.LongDate);
 	const formattedCurrentTime = time(new Date(Date.now()), TimestampStyles.LongDate);
+
 	return "_" + formattedSnapshotTime + " -> " + formattedCurrentTime + "_";
 }
 
-async function generateJudgeTableText(judgeDocuments, client) {
+async function generateJudgeTableBlock(client) {
+	const judgeDocuments = await Judge.enqueue(() => Judge.find({}));
+
 	const colouredTopFrame = Coloriser.color(process.env.AUDIT_FRAME_TOP, "GREY");
 	const colouredTagFrame = Coloriser.colorFromMarkers(process.env.AUDIT_FRAME_TAG);
 	const colouredMidFrame = Coloriser.color(process.env.AUDIT_FRAME_MID, "GREY");
 
-	let contents = "";
+	let colouredContents = "";
 	attachIntervalAndTotalProperties(judgeDocuments);
 	const sortedJudgeDocuments = sortJudgeDocuments(judgeDocuments); // Sorts based on judgedInInterval
 	for(let i = 0; i < sortedJudgeDocuments.length; i++) {
 		attachIntervalChange(sortedJudgeDocuments[i]);
-		contents += await generateTableRow(i, sortedJudgeDocuments[i], client) + "\n";
+		colouredContents += await generateTableRow(i, sortedJudgeDocuments[i], client) + "\n";
 	}
 
 	const colouredBotFrame = Coloriser.color(process.env.AUDIT_FRAME_BOT, "GREY");
@@ -82,8 +100,42 @@ async function generateJudgeTableText(judgeDocuments, client) {
 		   colouredTopFrame + "\n" + 
 		   colouredTagFrame + "\n" +
 		   colouredMidFrame + "\n" +
-		   contents + // \n already attached
-		   colouredBotFrame +
+		   colouredContents + // \n already attached
+		   colouredBotFrame + "```";
+}
+
+async function generateSubmissionTableBlock() {
+	const countRowPromises = Promise.all([
+		generateFormattedTagCounts(),
+		generateFormattedSubCounts()
+	]);
+
+	const colouredTopFrame = Coloriser.color(process.env.SUBMISSION_FRAME_TOP, "GREY");
+	const colouredTagFrame = Coloriser.colorFromMarkers(process.env.SUBMISSION_FRAME_TAG);
+	const colouredMidFrame = Coloriser.color(process.env.SUBMISSION_FRAME_MID, "GREY");
+	const colouredSubFrame = Coloriser.colorFromMarkers(process.env.SUBMISSION_FRAME_SUB);
+	const colouredBotFrame = Coloriser.color(process.env.SUBMISSION_FRAME_BOT, "GREY");
+
+	const countRows = await countRowPromises;
+	const colouredTagCount = countRows[0];
+	const colouredSubCount = countRows[1];
+
+	return "```ansi" + "\n" +
+		   colouredTopFrame + "\n" + 
+		   colouredTagFrame + "\n" + 
+		   colouredTagCount + "\n" + 
+		   colouredMidFrame + "\n" + 
+		   colouredSubFrame + "\n" + 
+		   colouredSubCount + "\n" + 
+		   colouredBotFrame + "```";
+}
+
+async function generateTotalBlock() {
+	const count = await Submission.enqueue(() => Submission.countDocuments().exec());
+	let countText = TextFormatter.resizeFront(count.toString(), 38);
+	countText = Coloriser.color(countText, "TEAL");
+	return "```ansi" + "\n" + 
+		   Coloriser.color("Total Submissions:", "WHITE") + countText + 
 		   "```";
 }
 
@@ -120,17 +172,13 @@ async function generateTableRow(index, modifiedJudgeDoc, client) {
 	let interimText = generateInterimText(modifiedJudgeDoc);
 	let totalText = generateTotalText(modifiedJudgeDoc);
 
-	const divider = Coloriser.color("|", "GREY");
-	return `${divider} ${indexText} ${divider} ${usernameText} ${divider} ${interimText} ${divider} ${totalText} ${divider}`;
-}
-
-function generateSubmissionTableText() {
-
+	return `${DIVIDER} ${indexText} ${DIVIDER} ${usernameText} ${DIVIDER} ${interimText} ${DIVIDER} ${totalText} ${DIVIDER}`;
 }
 
 function generateIndexText(index) {
-	let indexText = TextFormatter.resizeEnd(index.toString(), 3, " ", "..");
-	if(index <= 5) indexText = Coloriser.color(indexText, index); // If it's >5, it will be coloured the same as the pipe (grey) which is appropriate
+	const placement = index + 1;
+	let indexText = TextFormatter.resizeEnd(placement.toString(), 3, " ", "..");
+	if(placement <= 5) indexText = Coloriser.color(indexText, index); // If it's >5, it will be coloured the same as the pipe (grey) which is appropriate
 	return indexText;
 }
 
@@ -196,4 +244,38 @@ function generateTotalText(modifiedJudgeDoc) {
 	totalText = TextFormatter.resizeFront(totalText, 5, "0");
 	totalText = Coloriser.colorIndices(totalText, [0, 5 - properTotalLength], ["GREY", "WHITE"]);
 	return totalText;
+}
+
+const openStatuses = ["AWAITING DECISION", "AWAITING VETO", "PENDING APPROVAL"];
+const closedStatuses = ["APPROVED", "REJECTED", "VETOED"];
+const tagSizes = [24, 25];
+async function generateFormattedTagCounts() {
+	let counts = await Promise.all([
+		Submission.enqueue(() => Submission.countDocuments({status: {$in: openStatuses}}).exec()),
+		Submission.enqueue(() => Submission.countDocuments({status: {$in: closedStatuses}}).exec())
+	]);
+	for(let i = 0; i < counts.length; i++) {
+		counts[i] = TextFormatter.insertAtCenter(counts[i].toString(), " ".repeat(tagSizes[i]));
+		counts[i] = Coloriser.color(counts[i], "WHITE");
+	}
+
+	return `${DIVIDER} ${counts[0]} ${DIVIDER} ${counts[1]} ${DIVIDER}`; // Using `` to add spaces around the dividers
+}
+
+const unvetoedStatuses = ["AWAITING VETO", "PENDING APPROVAL"];
+const rejectedStatuses = ["REJECTED", "VETOED"];
+const subSizes = [10, 11, 11, 11];
+async function generateFormattedSubCounts() {
+	const counts = await Promise.all([
+		Submission.enqueue(() => Submission.countDocuments({status: "AWAITING DECISION"}).exec()),
+		Submission.enqueue(() => Submission.countDocuments({status: {$in: unvetoedStatuses}}).exec()),
+		Submission.enqueue(() => Submission.countDocuments({status: "APPROVED"}).exec()),
+		Submission.enqueue(() => Submission.countDocuments({status: {$in: rejectedStatuses}}).exec())
+	]);
+	for(let i = 0; i < counts.length; i++) { // Fields are different sizes
+		counts[i] = TextFormatter.insertAtCenter(counts[i].toString(), " ".repeat(subSizes[i]));
+		counts[i] = Coloriser.color(counts[i], "WHITE");
+	}
+
+	return `${DIVIDER} ${counts[0]} ${DIVIDER} ${counts[1]} ${DIVIDER} ${counts[2]} ${DIVIDER} ${counts[3]} ${DIVIDER}`;
 }
