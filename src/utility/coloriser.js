@@ -34,7 +34,7 @@ class Coloriser { // TODO americanise all colours
 		return colouredString;
 	}
 
-	static colorIndices(text, indices, colorCodes) { // Indices and colors should be the same length
+	static colorFromIndices(text, indices, colorCodes) { // Indices and colors should be the same length
 		let colouredText = "";
 		for(let i = 0; i < indices.length; i++) {
 			const textSegment = text.substring(indices[i], indices[i + 1]); // The final index + 1 will be undefined, which substring uses to go from start index to end of the string, so it's fine

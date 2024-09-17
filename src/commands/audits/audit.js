@@ -63,10 +63,10 @@ async function generateDescriptionText(client) {
 	const submissionTableEmbed = descriptionParts[2];
 	const totalEmbed = descriptionParts[3];
 
-	return dateText + "\n" +
+	return dateText + "\n\n" +
 		   "**" + judgeTableEmbed + "** " +  // Lack of \n packs them close together but still on different lines; space included after the double asterisk or they conflict
 		   "**" + submissionTableEmbed + "** " +
-		   "_" + totalEmbed + "_";
+		   "**_" + totalEmbed + "_**";
 	}
 
 async function generateDateText() {
@@ -132,18 +132,28 @@ async function generateSubmissionTableBlock() {
 
 async function generateTotalBlock() {
 	const count = await Submission.enqueue(() => Submission.countDocuments().exec());
-	let countText = TextFormatter.resizeFront(count.toString(), 38);
-	countText = Coloriser.color(countText, "TEAL");
+
+	let countText = count.toString();
+	const properCountLength = countText.length;
+
+	countText = TextFormatter.resizeFront(count.toString(), 5, "0");
+	countText = TextFormatter.resizeFront(countText, 38);
+	countText = Coloriser.colorFromIndices(
+		"Total Submissions:" + countText, 
+		[0, 17, 56 - properCountLength], // 56 is the max embed block width, but 55 is used here as indices start at 0
+		["WHITE", "GREY", "TEAL"] // White for "Total Submissions:", grey for leading 0's, and teal for the actual count
+	);
+
 	return "```ansi" + "\n" + 
-		   Coloriser.color("Total Submissions:", "WHITE") + countText + 
+		   countText +
 		   "```";
 }
 
 function attachIntervalAndTotalProperties(judgeDocuments) {
-	judgeDocuments.forEach(judgeDocument => {
-		judgeDocument.currentJudgedTotal = judgeDocument.counselledSubmissionIds.length + judgeDocument.totalSubmissionsClosed; // Used later
-		if(judgeDocument.snappedJudgedInterval) judgeDocument.judgedInInterval = judgeDocument.currentJudgedTotal - judgeDocument.snappedJudgedInterval; // Conventional flow; not a new judge
-		else judgeDocument.judgedInInterval = judgeDocument.currentJudgedTotal; // A new judge is one implied to have been created since the last snapshot, so we just take judgedInInterval as their currentJudgedTotal
+	judgeDocuments.forEach(judgeDoc => {
+		judgeDoc.currentJudgedTotal = judgeDoc.counselledSubmissionIds.length + judgeDoc.totalSubmissionsClosed;
+		if(judgeDoc.snappedJudgedInterval) judgeDoc.judgedInInterval = judgeDoc.currentJudgedTotal - judgeDoc.snappedJudgedTotal; // Conventional flow; not a new judge
+		else judgeDoc.judgedInInterval = judgeDoc.currentJudgedTotal; // A new judge is one implied to have been created since the last snapshot, so we just take judgedInInterval as their currentJudgedTotal
 	});
 }
 
@@ -151,18 +161,18 @@ function sortJudgeDocuments(judgeDocuments) {
 	return judgeDocuments.sort((docA, docB) => docB.judgedInInterval - docA.judgedInInterval);
 }
 
-function attachIntervalChange(judgeDocument) { // % change compared to last judgedInInterval value
-	if(judgeDocument.snappedJudgedInterval !== undefined) {
-		if(judgeDocument.snappedJudgedInterval !== 0) {
-			judgeDocument.intervalChange = judgeDocument.judgedInInterval / judgeDocument.snappedJudgedInterval * 100; // %
-			judgeDocument.intervalChange = -100 + judgeDocument.intervalChange; // % change (e.g. 4n, 16b = -75%; 28n, 16b = +75%)
-			judgeDocument.intervalChange = Math.min(Math.max(judgeDocument.intervalChange, -1000), 1000); // Snap between -1000 and 1000; becomes 999+%
+function attachIntervalChange(judgeDoc) { // % change compared to last judgedInInterval value
+	if(judgeDoc.snappedJudgedInterval !== undefined) {
+		if(judgeDoc.snappedJudgedInterval !== 0) {
+			judgeDoc.intervalChange = judgeDoc.judgedInInterval / judgeDoc.snappedJudgedInterval * 100; // %
+			judgeDoc.intervalChange = -100 + judgeDoc.intervalChange; // % change (e.g. 4n, 16b = -75%; 28n, 16b = +75%)
+			judgeDoc.intervalChange = Math.min(Math.max(judgeDoc.intervalChange, -1000), 1000); // Snap between -1000 and 1000; becomes 999+%
 		} else {
-			if(judgeDocument.judgedInInterval === 0) judgeDocument.intervalChange = 0; // 0 judged before, 0 judged now, hence 0
-			else judgeDocument.intervalChange = 1000; // ∞ symbol looks too sad so we just say >999
+			if(judgeDoc.judgedInInterval === 0) judgeDoc.intervalChange = 0; // 0 judged before, 0 judged now, hence 0
+			else judgeDoc.intervalChange = 9999; // ∞ symbol looks too sad so we just say 9999, the max
 		}
 	} else {
-		judgeDocument.intervalChange = "N/A"; // Unique placeholder value: N/A%
+		judgeDocument.intervalChange = "???"; // Unique placeholder value: ???%
 	}
 }
 
@@ -192,39 +202,41 @@ async function generateUserText(modifiedJudgeDoc, client) {
 }
 
 function generateInterimText(modifiedJudgeDoc) {
-	let quantityText;
-	if(modifiedJudgeDoc.judgedInInterval >= 1000) quantityText = ">999";
-	else quantityText = modifiedJudgeDoc.judgedInInterval.toString();
+	let quantityText = Math.min(modifiedJudgeDoc.judgedInInterval, 99999).toString();
 	const properQuantityLength = quantityText.length; // Used later for colouring
-	quantityText = TextFormatter.resizeFront(quantityText, 4, "0");
+	quantityText = TextFormatter.resizeFront(quantityText, 5, "0");
 
 	let changeText;
 	let changeTextColor;
 	let properChangeLength;
 	if(typeof modifiedJudgeDoc.intervalChange === "number") {
-		if(Math.abs(modifiedJudgeDoc.intervalChange) >= 1000) changeText = ">999";
-		else changeText = Math.round(Math.abs(modifiedJudgeDoc.intervalChange)).toString(); // Significance indicated by colour
-		properChangeLength = changeText.length; // Used later for colouring
-		changeText = TextFormatter.resizeFront(changeText, 4, "0");
+		changeText = Math.round(Math.abs(Math.min(modifiedJudgeDoc.intervalChange, 9999))).toString();
+		const sign = modifiedJudgeDoc.intervalChange >= 0 ? modifiedJudgeDoc.intervalChange > 0 ? "+" : "±" : "-";
+		changeText = sign + changeText; // Inserts sign symbol
+
+		properChangeLength = changeText.length;
+
+		changeText = TextFormatter.resizeFront(changeText, 5, "0"); // Add leading 0s
 		changeTextColor = modifiedJudgeDoc.intervalChange >= 0 ? modifiedJudgeDoc.intervalChange > 0 ? "GREEN" : "YELLOW" : "RED";
-	} else {
+	} else { // Indicates a unique value
 		changeText = modifiedJudgeDoc.intervalChange;
+
 		properChangeLength = modifiedJudgeDoc.intervalChange.length;
-		if(changeText === "∞") changeTextColor = "GREEN";
-		else if(changeText === "N/A") changeTextColor = "YELLOW";
-		changeText = TextFormatter.resizeFront(changeText, 4, " ");
+		changeText = TextFormatter.resizeFront(changeText, 5, "0");
+		
+		if(modifiedJudgeDoc.intervalChange === "???") changeTextColor = "YELLOW";
 	}
 
 	let interimText = quantityText + "   (" + changeText + "%)";
 	interimText = TextFormatter.resizeEnd(interimText, 19);
-	interimText = Coloriser.colorIndices(
+	interimText = Coloriser.colorFromIndices(
 		interimText,
 		[
 			0, // Leading 0s
-			4 - properQuantityLength, // Quantity value
-			6, // Leading % bracket and 0s
-			8 + (4 - properChangeLength), // Change value
-			13 // Closing bracket
+			5 - properQuantityLength, // Quantity value
+			8, // Leading % bracket and 0s
+			9 + (5 - properChangeLength), // Change value
+			15 // Closing bracket
 		],
 		[
 			"GREY",
@@ -242,7 +254,7 @@ function generateTotalText(modifiedJudgeDoc) {
 	if(modifiedJudgeDoc.currentJudgedTotal >= 10000) totalText = "9999+"; // In some insane universe
 	const properTotalLength = totalText.length;
 	totalText = TextFormatter.resizeFront(totalText, 5, "0");
-	totalText = Coloriser.colorIndices(totalText, [0, 5 - properTotalLength], ["GREY", "WHITE"]);
+	totalText = Coloriser.colorFromIndices(totalText, [0, 5 - properTotalLength], ["GREY", "WHITE"]);
 	return totalText;
 }
 
@@ -255,13 +267,23 @@ async function generateFormattedTagCounts() {
 		Submission.enqueue(() => Submission.countDocuments({status: {$in: closedStatuses}}).exec())
 	]);
 	for(let i = 0; i < counts.length; i++) {
-		counts[i] = TextFormatter.insertAtCenter(counts[i].toString(), " ".repeat(tagSizes[i]));
-		counts[i] = Coloriser.color(counts[i], "WHITE");
+		counts[i] = Math.min(counts[i], 99999).toString(); // 5 places is the largest possible value
+		const properCountLength = counts[i].length; // Used for colouring later; needs to be saved here as text is padded with 0s
+
+		counts[i] = TextFormatter.resizeFront(counts[i], 5, "0");
+		const centerStartIndex = TextFormatter.findCenteredStartIndex(5, tagSizes[i]);
+		counts[i] = TextFormatter.replaceAt(centerStartIndex, counts[i], " ".repeat(tagSizes[i]));
+
+		counts[i] = Coloriser.colorFromIndices(
+			counts[i],
+			[0, centerStartIndex + (5 - properCountLength)],
+			["GREY", "WHITE"] // Colour start and leading 0s grey, with actual number white
+		);
 	}
 
 	return `${DIVIDER} ${counts[0]} ${DIVIDER} ${counts[1]} ${DIVIDER}`; // Using `` to add spaces around the dividers
 }
-
+// TODO go through code and replace resizes with appropriate decapitate / abbreviate
 const unvetoedStatuses = ["AWAITING VETO", "PENDING APPROVAL"];
 const rejectedStatuses = ["REJECTED", "VETOED"];
 const subSizes = [10, 11, 11, 11];
@@ -273,8 +295,19 @@ async function generateFormattedSubCounts() {
 		Submission.enqueue(() => Submission.countDocuments({status: {$in: rejectedStatuses}}).exec())
 	]);
 	for(let i = 0; i < counts.length; i++) { // Fields are different sizes
-		counts[i] = TextFormatter.insertAtCenter(counts[i].toString(), " ".repeat(subSizes[i]));
-		counts[i] = Coloriser.color(counts[i], "WHITE");
+		counts[i] = Math.min(counts[i], 99999).toString();
+		const properCountLength = counts[i].length;
+
+		counts[i] = TextFormatter.resizeFront(counts[i], 5, "0");
+
+		const centerStartIndex = TextFormatter.findCenteredStartIndex(5, subSizes[i]);
+		counts[i] = TextFormatter.replaceAt(centerStartIndex, counts[i], " ".repeat(subSizes[i]));
+
+		counts[i] = Coloriser.colorFromIndices(
+			counts[i],
+			[0, centerStartIndex + (5 - properCountLength)],
+			["GREY", "WHITE"]
+		);
 	}
 
 	return `${DIVIDER} ${counts[0]} ${DIVIDER} ${counts[1]} ${DIVIDER} ${counts[2]} ${DIVIDER} ${counts[3]} ${DIVIDER}`;

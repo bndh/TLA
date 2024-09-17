@@ -1,14 +1,14 @@
 class TextFormatter {
 	static resizeFront(text, targetLength, fillerReplacement = " ", excessReplacement = "") {
 		if(text.length < targetLength) return text.padStart(targetLength, fillerReplacement);
-		if(text.length > targetLength) return decapitate(text, targetLength, excessReplacement);
+		if(text.length > targetLength) return this.decapitate(text, targetLength, excessReplacement);
 		return text;
 		
 	}
 	
 	static resizeEnd(text, targetLength, fillerReplacement = " ", excessReplacement = "") {
 		if(text.length < targetLength) return text.padEnd(targetLength, fillerReplacement);
-		if(text.length > targetLength) return abbreviate(text, targetLength, excessReplacement);
+		if(text.length > targetLength) return this.abbreviate(text, targetLength, excessReplacement);
 		return text;
 	}
 	
@@ -28,11 +28,9 @@ class TextFormatter {
 		return text + replacement;
 	}
 
-	static insertAtCenter(text, field) {
-		const startIndex = this.findCenteredStartIndex(text.length, field.length);
-		return field.substring(0, startIndex) +
-			   text +
-			   field.substring(startIndex + text.length);
+	static replaceAtCenter(replacement, text) {
+		const startIndex = this.findCenteredStartIndex(replacement.length, text.length);
+		return this.replaceAt(startIndex, replacement, text);
 	}
 
 	static findCenteredStartIndex(textLength, fieldLength) {
@@ -40,6 +38,12 @@ class TextFormatter {
 		const start = center - Math.ceil(textLength / 2);
 		return start;
 	}
+
+	static replaceAt(index, replacement, text) {
+		return text.substring(0, index) + replacement + text.substring(index + replacement.length);
+	}
 }
+
+// TODO adding prototype methods https://stackoverflow.com/questions/1431094/how-do-i-replace-a-character-at-a-specific-index-in-javascript#:~:text=Javascript%20strings%20are%20immutable%2C%20they,same%20string%20is%20ONE%20object.
 
 module.exports = TextFormatter;
