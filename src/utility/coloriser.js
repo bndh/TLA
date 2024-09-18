@@ -63,6 +63,16 @@ class Coloriser { // TODO americanise all colours
 	static getKeyFromIndex(map, index) {
 		return Array.from(map.keys())[index];
 	}
+
+	static getColorCharacterLength(...colorCodes) {
+		let total = 0;
+		for(let colorCode of colorCodes) {
+			if(typeof colorCode === "number") colorCode = this.getKeyFromIndex(this.Colors, colorCode);
+			if(!colorCode) continue;
+			total += this.Colors.get(colorCode).length;
+		}
+		return total;
+	}
 }
 
 module.exports = Coloriser;

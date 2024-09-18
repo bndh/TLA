@@ -1,9 +1,10 @@
 require("dotenv").config();
 const {REST, Routes} = require("discord.js");
-const getLocalCommands = require("./utility/getLocalCommands");
+const path = require("path");
+const getAllExports = require("./utility/files/getAllExports");
 
 const commands = [];
-for(const command of getLocalCommands()) {
+for(const command of getAllExports(path.join(__dirname, "commands"))) {
 	if("data" in command && "execute" in command) {
 		commands.push(command.data.toJSON());
 	} else {

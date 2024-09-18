@@ -1,6 +1,6 @@
 require("dotenv").config();
 
-const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, time, TimestampStyles } = require("discord.js");
+const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, time, TimestampStyles, ButtonBuilder, ButtonStyle, ActionRow, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder } = require("discord.js");
 
 const Info = require("../../mongo/Info");
 const Judge = require("../../mongo/Judge");
@@ -28,15 +28,16 @@ module.exports = {
 		const deferPromise = interaction.deferReply();
 
 		const auditEmbed = await generateAuditEmbed(interaction.client);
+		const actionRow = generateActionRow();
 
 		await deferPromise;
-		interaction.editReply({embeds: [auditEmbed]});
+		interaction.editReply({embeds: [auditEmbed], components: [actionRow]});
 	}
 }
 
 async function generateAuditEmbed(client) {
 	return new EmbedBuilder() // Everything except 
-		.setAuthor({name: "TLA Admin Team", iconURL: "https://cdn.discordapp.com/app-icons/1206590967155531856/8e9b1189eab3a2cba17baa92327ac624.png", url: "https://www.youtube.com/@bndh4409"})
+		.setAuthor({name: "TLA Admin Team", iconURL: "https://cdn.discordapp.com/emojis/1198512672585547917.webp?size=96&quality=lossless", url: "https://www.youtube.com/@bndh4409"})
 		.setTitle("__*JUDGE AUDIT REPORT*__")
 		.setFooter({text: "Page 1 of 10", iconURL: "https://images.emojiterra.com/twitter/v14.0/512px/1f4c4.png"})
 		.setColor(process.env.AUDIT_COLOR)
@@ -44,7 +45,27 @@ async function generateAuditEmbed(client) {
 }
 
 function generateActionRow() {
-	// help button, e.g. sizing not working (turn off member preview/go on pc), coloring not working, etc.
+	const nextPageButton = new ButtonBuilder()
+		.setCustomId("next")
+		.setEmoji("➡️")
+		.setStyle(ButtonStyle.Secondary);
+	const previousPageButton = new ButtonBuilder()
+		.setCustomId("previous")
+		.setEmoji("⬅️")
+		.setStyle(ButtonStyle.Secondary);
+	const searchButton = new ButtonBuilder()
+		.setCustomId("search")
+		.setLabel("Search")
+		.setEmoji("🔎")
+		.setStyle(ButtonStyle.Success);
+	const helpButton = new ButtonBuilder()
+		.setCustomId("help")
+		.setLabel("Help")
+		.setEmoji("❓")
+		.setStyle(ButtonStyle.Success);
+
+	return new ActionRowBuilder()
+		.setComponents(previousPageButton, searchButton, helpButton, nextPageButton);
 }
 
 function snapshotJudgeData() {
@@ -186,9 +207,9 @@ async function generateTableRow(index, modifiedJudgeDoc, client) {
 }
 
 function generateIndexText(index) {
-	const placement = index + 1;
-	let indexText = TextFormatter.resizeEnd(placement.toString(), 3, " ", "..");
-	if(placement <= 5) indexText = Coloriser.color(indexText, index); // If it's >5, it will be coloured the same as the pipe (grey) which is appropriate
+	let placement = index + 1;
+	if(placement >= 1000) placement = 999;
+	let indexText = TextFormatter.digitiseNumber(placement, 3, placement <= 5 ? index : 6); // If it's >5, it will be coloured the same as the pipe (6: grey) which is appropriate
 	return indexText;
 }
 
@@ -202,60 +223,32 @@ async function generateUserText(modifiedJudgeDoc, client) {
 }
 
 function generateInterimText(modifiedJudgeDoc) {
-	let quantityText = Math.min(modifiedJudgeDoc.judgedInInterval, 99999).toString();
-	const properQuantityLength = quantityText.length; // Used later for colouring
-	quantityText = TextFormatter.resizeFront(quantityText, 5, "0");
-
-	let changeText;
-	let changeTextColor;
-	let properChangeLength;
-	if(typeof modifiedJudgeDoc.intervalChange === "number") {
-		changeText = Math.round(Math.abs(Math.min(modifiedJudgeDoc.intervalChange, 9999))).toString();
-		const sign = modifiedJudgeDoc.intervalChange >= 0 ? modifiedJudgeDoc.intervalChange > 0 ? "+" : "±" : "-";
-		changeText = sign + changeText; // Inserts sign symbol
-
-		properChangeLength = changeText.length;
-
-		changeText = TextFormatter.resizeFront(changeText, 5, "0"); // Add leading 0s
-		changeTextColor = modifiedJudgeDoc.intervalChange >= 0 ? modifiedJudgeDoc.intervalChange > 0 ? "GREEN" : "YELLOW" : "RED";
-	} else { // Indicates a unique value
-		changeText = modifiedJudgeDoc.intervalChange;
-
-		properChangeLength = modifiedJudgeDoc.intervalChange.length;
-		changeText = TextFormatter.resizeFront(changeText, 5, "0");
-		
-		if(modifiedJudgeDoc.intervalChange === "???") changeTextColor = "YELLOW";
+	let changeColour;
+	let changeSignSymbol;
+	if(modifiedJudgeDoc.intervalChange >= 0) {
+		if(modifiedJudgeDoc.intervalChange > 0) {
+			changeColour = "GREEN";
+			changeSignSymbol = "+";
+		} else {
+			changeColour = "YELLOW";
+			changeSignSymbol = "=";
+		}
+	} else {
+		changeColour = "RED";
+		changeSignSymbol = "-";
 	}
+	const changeText = TextFormatter.digitiseNumber(Math.abs(modifiedJudgeDoc.intervalChange), 6, changeColour, changeSignSymbol, "%"); // Absolute value or "--" will happen
+	const quantityText = TextFormatter.digitiseNumber(modifiedJudgeDoc.judgedInInterval);
+	const hiddenGreyCharacterLength = Coloriser.getColorCharacterLength("GREY") * 4;
+	const hiddenColorCharacterLength = Coloriser.getColorCharacterLength("WHITE", changeColour);
 
-	let interimText = quantityText + "   (" + changeText + "%)";
-	interimText = TextFormatter.resizeEnd(interimText, 19);
-	interimText = Coloriser.colorFromIndices(
-		interimText,
-		[
-			0, // Leading 0s
-			5 - properQuantityLength, // Quantity value
-			8, // Leading % bracket and 0s
-			9 + (5 - properChangeLength), // Change value
-			15 // Closing bracket
-		],
-		[
-			"GREY",
-			"WHITE",
-			"GREY",
-			changeTextColor,
-			"GREY"
-		]
-	);
+	let interimText = quantityText + "  " + Coloriser.color("(", "GREY") + changeText + Coloriser.color(")", "GREY");
+	interimText = interimText.padEnd(19 + (hiddenGreyCharacterLength + hiddenColorCharacterLength));
 	return interimText;
 }
 
 function generateTotalText(modifiedJudgeDoc) {
-	let totalText = modifiedJudgeDoc.currentJudgedTotal.toString();
-	if(modifiedJudgeDoc.currentJudgedTotal >= 10000) totalText = "9999+"; // In some insane universe
-	const properTotalLength = totalText.length;
-	totalText = TextFormatter.resizeFront(totalText, 5, "0");
-	totalText = Coloriser.colorFromIndices(totalText, [0, 5 - properTotalLength], ["GREY", "WHITE"]);
-	return totalText;
+	return TextFormatter.digitiseNumber(modifiedJudgeDoc.currentJudgedTotal);
 }
 
 const openStatuses = ["AWAITING DECISION", "AWAITING VETO", "PENDING APPROVAL"];
@@ -267,18 +260,7 @@ async function generateFormattedTagCounts() {
 		Submission.enqueue(() => Submission.countDocuments({status: {$in: closedStatuses}}).exec())
 	]);
 	for(let i = 0; i < counts.length; i++) {
-		counts[i] = Math.min(counts[i], 99999).toString(); // 5 places is the largest possible value
-		const properCountLength = counts[i].length; // Used for colouring later; needs to be saved here as text is padded with 0s
-
-		counts[i] = TextFormatter.resizeFront(counts[i], 5, "0");
-		const centerStartIndex = TextFormatter.findCenteredStartIndex(5, tagSizes[i]);
-		counts[i] = TextFormatter.replaceAt(centerStartIndex, counts[i], " ".repeat(tagSizes[i]));
-
-		counts[i] = Coloriser.colorFromIndices(
-			counts[i],
-			[0, centerStartIndex + (5 - properCountLength)],
-			["GREY", "WHITE"] // Colour start and leading 0s grey, with actual number white
-		);
+		counts[i] = TextFormatter.digitiseNumber(counts[i], 5, "WHITE", undefined, undefined, tagSizes[i]);
 	}
 
 	return `${DIVIDER} ${counts[0]} ${DIVIDER} ${counts[1]} ${DIVIDER}`; // Using `` to add spaces around the dividers
@@ -295,20 +277,9 @@ async function generateFormattedSubCounts() {
 		Submission.enqueue(() => Submission.countDocuments({status: {$in: rejectedStatuses}}).exec())
 	]);
 	for(let i = 0; i < counts.length; i++) { // Fields are different sizes
-		counts[i] = Math.min(counts[i], 99999).toString();
-		const properCountLength = counts[i].length;
-
-		counts[i] = TextFormatter.resizeFront(counts[i], 5, "0");
-
-		const centerStartIndex = TextFormatter.findCenteredStartIndex(5, subSizes[i]);
-		counts[i] = TextFormatter.replaceAt(centerStartIndex, counts[i], " ".repeat(subSizes[i]));
-
-		counts[i] = Coloriser.colorFromIndices(
-			counts[i],
-			[0, centerStartIndex + (5 - properCountLength)],
-			["GREY", "WHITE"]
-		);
+		counts[i] = TextFormatter.digitiseNumber(counts[i], 5, "WHITE", undefined, undefined, subSizes[i]);
 	}
 
 	return `${DIVIDER} ${counts[0]} ${DIVIDER} ${counts[1]} ${DIVIDER} ${counts[2]} ${DIVIDER} ${counts[3]} ${DIVIDER}`;
 }
+

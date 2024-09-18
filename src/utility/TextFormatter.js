@@ -1,3 +1,5 @@
+const Coloriser = require("./Coloriser");
+
 class TextFormatter {
 	static resizeFront(text, targetLength, fillerReplacement = " ", excessReplacement = "") {
 		if(text.length < targetLength) return text.padStart(targetLength, fillerReplacement);
@@ -41,6 +43,37 @@ class TextFormatter {
 
 	static replaceAt(index, replacement, text) {
 		return text.substring(0, index) + replacement + text.substring(index + replacement.length);
+	}
+
+	static digitiseNumber(number, maxLength = 5, colour = "WHITE", prefix = undefined, suffix = undefined, centerFieldSize = undefined) {
+		const cappedNumber = Math.min(
+			Math.round(number), 
+			parseInt("9".repeat(maxLength))
+		);
+		
+		let formattedNumber = cappedNumber.toString();
+		if(prefix) formattedNumber = prefix + formattedNumber;
+		if(suffix) formattedNumber = formattedNumber + suffix;
+		const properNumberLength = formattedNumber.length; // Used for colouring
+	
+		const paddedNumber = formattedNumber.padStart(maxLength, "0");
+	
+		if(!centerFieldSize) {
+			return Coloriser.colorFromIndices( // Colours the number in the desired colour while leaving the leading 0's grey
+				paddedNumber,
+				[0, maxLength - properNumberLength],
+				["GREY", colour]
+			)
+		} else {
+			const centerStartIndex = TextFormatter.findCenteredStartIndex(maxLength, centerFieldSize); // Used for colouring
+			const centeredNumber = TextFormatter.replaceAt(centerStartIndex, paddedNumber, " ".repeat(centerFieldSize));
+		
+			return Coloriser.colorFromIndices(
+				centeredNumber,
+				[0, centerStartIndex + (maxLength - properNumberLength)],
+				["GREY", colour]
+			);
+		}
 	}
 }
 
