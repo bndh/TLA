@@ -13,20 +13,20 @@ module.exports = {
 		.setName("snapshot")
 		.setDescription("Overwrite the previous audit data with the current system state.")
 		.addBooleanOption(optionBuilder => optionBuilder
-			.setName("lossless")
-			.setDescription("If true, a snapshot will only be taken if no previous audit data is present. (Default: true).")
+			.setName("overwrite")
+			.setDescription("If false, a snapshot will only be taken if no previous audit data is present. (Default: false).")
 			.setRequired(false)
 		)
 		.setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 	async execute(interaction) {
 		const deferPromise = interaction.deferReply({ephemeral: true});
 		
-		const lossless = interaction.options.getBoolean("lossless", false) ?? false;
-		if(lossless) {
+		const overwrite = interaction.options.getBoolean("overwrite", false) ?? false;
+		if(!overwrite) {
 			const previousSnapshotExists = await Info.exists({id: "snapshotCreationTime"});
 			if(previousSnapshotExists) {
 				await deferPromise;
-				interaction.editReply("\`A snapshot already exists\`! Did not overwrite due to lossless being set to \`True\`.");
+				interaction.editReply("\`A snapshot already exists\`! Did not record data in accordance with the \`Overwrite\` property.");
 				return;
 			}
 		}
@@ -80,8 +80,8 @@ async function snapshotJudges() {
 			const judgeDocument = judgeDocuments[i];
 			const currentJudgedTotal = judgeDocument.counselledSubmissionIds.length + judgeDocument.totalSubmissionsClosed;
 	
-			judgeDocument.snappedJudgedInterval = currentJudgedTotal; // If no previous snapshot is present, this will suffice
-			if(judgeDocument.snappedJudgedTotal) judgeDocument.snappedJudgedInterval -= judgeDocument.snappedJudgedTotal; // If the document had been previously snapped, we must subtract the total at the time of that snapshot to get the number judged in the interim
+			judgeDocument.snappedJudgedInterim = currentJudgedTotal; // If no previous snapshot is present, this will suffice
+			if(judgeDocument.snappedJudgedTotal) judgeDocument.snappedJudgedInterim -= judgeDocument.snappedJudgedTotal; // If the document had been previously snapped, we must subtract the total at the time of that snapshot to get the number judged in the interim
 		
 			judgeDocument.snappedJudgedTotal = currentJudgedTotal;
 

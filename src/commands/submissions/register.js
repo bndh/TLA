@@ -48,7 +48,7 @@ module.exports = {
 			Judge,
 			{userId: registree.id},
 			{$set: {judgeType: judgeType, counselledSubmissionIds: counselledSubmissionIds, totalSubmissionsClosed: totalSubmissionsClosed},
-			 $unset: {snappedJudgedInterval: 1, snappedJudgedTotal: 1}},
+			 $unset: {snappedJudgedInterim: 1, snappedJudgedTotal: 1}},
 			{userId: registree.id, judgeType: judgeType, counselledSubmissionIds: counselledSubmissionIds, totalSubmissionsClosed: totalSubmissionsClosed}
 		);
 

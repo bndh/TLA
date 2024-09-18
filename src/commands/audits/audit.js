@@ -5,10 +5,12 @@ const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, time, TimestampS
 const Info = require("../../mongo/Info");
 const Judge = require("../../mongo/Judge");
 const Submission = require("../../mongo/Submission");
+const Auditee = require("../../mongo/Auditee");
 const getAllThreads = require("../../utility/discord/threads/getAllThreads");
 const capitalise = require("../../utility/capitalise");
 const Coloriser = require("../../utility/Coloriser");
 const TextFormatter = require("../../utility/TextFormatter");
+const updateOrCreate = require("../../mongo/utility/updateOrCreate");
 
 const DIVIDER = Coloriser.color("│", "GREY");
 
@@ -20,7 +22,7 @@ module.exports = {
 		.setDescription("Manually perform an audit, displaying the contributions that each judge has made")
 		.addBooleanOption(optionBuilder => optionBuilder
 			.setName("overwrite")
-			.setDescription("Whether or not to overwrite the last system state snapshot. (Default: true).")
+			.setDescription("Whether or not to overwrite the last system state snapshot. (Default: false).")
 			.setRequired(false)
 		)
 		.setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
@@ -71,7 +73,7 @@ function generateActionRow() {
 function snapshotJudgeData() {
 	
 }
-
+// TODO check out if we can fix the blue basckgrounding
 async function generateDescriptionText(client) {
 	const descriptionParts = await Promise.all([
 		generateDateText(),
@@ -101,20 +103,19 @@ async function generateDateText() {
 }
 
 async function generateJudgeTableBlock(client) {
-	const judgeDocuments = await Judge.enqueue(() => Judge.find({}));
-
 	const colouredTopFrame = Coloriser.color(process.env.AUDIT_FRAME_TOP, "GREY");
 	const colouredTagFrame = Coloriser.colorFromMarkers(process.env.AUDIT_FRAME_TAG);
 	const colouredMidFrame = Coloriser.color(process.env.AUDIT_FRAME_MID, "GREY");
 
-	let colouredContents = "";
-	attachIntervalAndTotalProperties(judgeDocuments);
-	const sortedJudgeDocuments = sortJudgeDocuments(judgeDocuments); // Sorts based on judgedInInterval
-	for(let i = 0; i < sortedJudgeDocuments.length; i++) {
-		attachIntervalChange(sortedJudgeDocuments[i]);
-		colouredContents += await generateTableRow(i, sortedJudgeDocuments[i], client) + "\n";
-	}
+	const judgeDocs = await Judge.enqueue(() => Judge.find({}));
 
+	const auditees = await Promise.all(judgeDocs.map(judgeDoc => new Promise(async (resolve) => {
+		const user = await client.users.fetch(judgeDoc.userId);
+		return resolve(await createAuditee(judgeDoc, user.username));
+	})));
+	const sortedAuditees = auditees.sort((auditeeA, auditeeB) => auditeeB.judgedInInterim - auditeeA.judgedInInterim);
+
+	const colouredContents = await generateFormattedJudgeRows(sortedAuditees);
 	const colouredBotFrame = Coloriser.color(process.env.AUDIT_FRAME_BOT, "GREY");
 
 	return "```ansi" + "\n" + // Enables colour highlighting
@@ -123,6 +124,14 @@ async function generateJudgeTableBlock(client) {
 		   colouredMidFrame + "\n" +
 		   colouredContents + // \n already attached
 		   colouredBotFrame + "```";
+}
+
+async function generateFormattedJudgeRows(auditees, startingIndex = 0) {
+	let rows = "";
+	for(let i = 0; i < auditees.length; i++) {
+		rows += await generateTableRow(startingIndex + i, auditees[i]) + "\n";
+	}
+	return rows;
 }
 
 async function generateSubmissionTableBlock() {
@@ -170,38 +179,74 @@ async function generateTotalBlock() {
 		   "```";
 }
 
-function attachIntervalAndTotalProperties(judgeDocuments) {
+async function createAuditee(judgeDoc, username) {
+	const sizedUsername = TextFormatter.resizeEnd(username, 16, " ", "..");
+	const totalSubmissionsJudged = calculateTotalSubmissionsJudged(judgeDoc.counselledSubmissionIds, judgeDoc.totalSubmissionsClosed);
+	const judgedInInterim = calculateJudgedInInterim(totalSubmissionsJudged, judgeDoc.snappedJudgedInterim, judgeDoc.snappedJudgedTotal);
+	const interimChange = calculateInterimChange(judgedInInterim, judgeDoc.snappedJudgedInterim);
+	
+	return updateOrCreate(
+		Auditee,
+		{sizedUsername: sizedUsername},
+		{judgeType: judgeDoc.judgeType, judgedInInterim: judgedInInterim, interimChange: interimChange, totalSubmissionsJudged: totalSubmissionsJudged},
+		{sizedUsername: sizedUsername, judgeType: judgeDoc.judgeType, judgedInInterim: judgedInInterim, interimChange: interimChange, totalSubmissionsJudged: totalSubmissionsJudged}
+	);
+}
+
+function calculateTotalSubmissionsJudged(counselledSubmissionIds, totalSubmissionsClosed) {
+	return counselledSubmissionIds.length + totalSubmissionsClosed;
+}
+
+function calculateJudgedInInterim(totalSubmissionsJudged, snappedJudgedInterim, snappedJudgedTotal) {
+	if(snappedJudgedInterim) return totalSubmissionsJudged - snappedJudgedTotal; // Conventional flow; not a new judge
+	else return totalSubmissionsJudged; // A new judge (or one with 0 snappedJudgedTotal) is one implied to have been created since the last snapshot, so we just take judgedInInterim as their currentJudgedTotal
+}
+
+function calculateInterimChange(judgedInInterim, snappedJudgedInterim) {
+	if(snappedJudgedInterim !== undefined) {
+		if(snappedJudgedInterim !== 0) {
+			return -100 + (judgedInInterim / snappedJudgedInterim * 100); // % change (e.g. 4n, 16b = -75%; 28n, 16b = +75%)
+		} else {
+			if(judgedInInterim === 0) return 0; // 0 judged before, 0 judged now, hence 0
+			else return 9999; // ∞ symbol looks too sad so we just say 9999, the max
+		}
+	} else {
+		return "???"; // Unique placeholder value: ???%
+	}
+}
+
+function attachInterimAndTotalProperties(judgeDocuments) {
 	judgeDocuments.forEach(judgeDoc => {
 		judgeDoc.currentJudgedTotal = judgeDoc.counselledSubmissionIds.length + judgeDoc.totalSubmissionsClosed;
-		if(judgeDoc.snappedJudgedInterval) judgeDoc.judgedInInterval = judgeDoc.currentJudgedTotal - judgeDoc.snappedJudgedTotal; // Conventional flow; not a new judge
-		else judgeDoc.judgedInInterval = judgeDoc.currentJudgedTotal; // A new judge is one implied to have been created since the last snapshot, so we just take judgedInInterval as their currentJudgedTotal
+		if(judgeDoc.snappedJudgedInterim) judgeDoc.judgedInInterim = judgeDoc.currentJudgedTotal - judgeDoc.snappedJudgedTotal; // Conventional flow; not a new judge
+		else judgeDoc.judgedInInterim = judgeDoc.currentJudgedTotal; // A new judge is one implied to have been created since the last snapshot, so we just take judgedInInterim as their currentJudgedTotal
 	});
 }
 
 function sortJudgeDocuments(judgeDocuments) {
-	return judgeDocuments.sort((docA, docB) => docB.judgedInInterval - docA.judgedInInterval);
+	return judgeDocuments.sort((docA, docB) => docB.judgedInInterim - docA.judgedInInterim);
 }
 
-function attachIntervalChange(judgeDoc) { // % change compared to last judgedInInterval value
-	if(judgeDoc.snappedJudgedInterval !== undefined) {
-		if(judgeDoc.snappedJudgedInterval !== 0) {
-			judgeDoc.intervalChange = judgeDoc.judgedInInterval / judgeDoc.snappedJudgedInterval * 100; // %
-			judgeDoc.intervalChange = -100 + judgeDoc.intervalChange; // % change (e.g. 4n, 16b = -75%; 28n, 16b = +75%)
-			judgeDoc.intervalChange = Math.min(Math.max(judgeDoc.intervalChange, -1000), 1000); // Snap between -1000 and 1000; becomes 999+%
+function attachInterimChange(judgeDoc) { // % change compared to last judgedInInterim value
+	if(judgeDoc.snappedJudgedInterim !== undefined) {
+		if(judgeDoc.snappedJudgedInterim !== 0) {
+			judgeDoc.interimChange = judgeDoc.judgedInInterim / judgeDoc.snappedJudgedInterim * 100; // %
+			judgeDoc.interimChange = -100 + judgeDoc.interimChange; // % change (e.g. 4n, 16b = -75%; 28n, 16b = +75%)
+			judgeDoc.interimChange = Math.min(Math.max(judgeDoc.interimChange, -1000), 1000); // Snap between -1000 and 1000; becomes 999+%
 		} else {
-			if(judgeDoc.judgedInInterval === 0) judgeDoc.intervalChange = 0; // 0 judged before, 0 judged now, hence 0
-			else judgeDoc.intervalChange = 9999; // ∞ symbol looks too sad so we just say 9999, the max
+			if(judgeDoc.judgedInInterim === 0) judgeDoc.interimChange = 0; // 0 judged before, 0 judged now, hence 0
+			else judgeDoc.interimChange = 9999; // ∞ symbol looks too sad so we just say 9999, the max
 		}
 	} else {
-		judgeDocument.intervalChange = "???"; // Unique placeholder value: ???%
+		judgeDoc.interimChange = "???"; // Unique placeholder value: ???%
 	}
 }
 
-async function generateTableRow(index, modifiedJudgeDoc, client) {
+async function generateTableRow(index, auditee) {
 	let indexText = generateIndexText(index);
-	let usernameText = await generateUserText(modifiedJudgeDoc, client);
-	let interimText = generateInterimText(modifiedJudgeDoc);
-	let totalText = generateTotalText(modifiedJudgeDoc);
+	let usernameText = generateUserText(auditee.sizedUsername, auditee.judgeType)
+	let interimText = generateInterimText(auditee.judgedInInterim, auditee.interimChange);
+	let totalText = generateTotalText(auditee.totalSubmissionsJudged);
 
 	return `${DIVIDER} ${indexText} ${DIVIDER} ${usernameText} ${DIVIDER} ${interimText} ${DIVIDER} ${totalText} ${DIVIDER}`;
 }
@@ -213,20 +258,18 @@ function generateIndexText(index) {
 	return indexText;
 }
 
-async function generateUserText(modifiedJudgeDoc, client) {
-	const user = await client.users.fetch(modifiedJudgeDoc.userId);
-	let userColorCode = 7;
-	if(modifiedJudgeDoc.judgeType === "admin") userColorCode = +process.env.ADMIN_COLOR_CODE;
-	else if(modifiedJudgeDoc.judgeType === "nominator") userColorCode = +process.env.NOMINATOR_COLOR_CODE;
-	let usernameText = TextFormatter.resizeEnd(user.username, 16, " ", "..");
-	return Coloriser.color(usernameText, userColorCode);
+function generateUserText(sizedUsername, judgeType) {
+	let auditeeColorCode = 7;
+	if(judgeType === "admin") auditeeColorCode = +process.env.ADMIN_COLOR_CODE;
+	else if(judgeType === "nominator") auditeeColorCode = +process.env.NOMINATOR_COLOR_CODE;
+	return Coloriser.color(sizedUsername, auditeeColorCode);
 }
 
-function generateInterimText(modifiedJudgeDoc) {
+function generateInterimText(judgedInInterim, interimChange,) {
 	let changeColour;
 	let changeSignSymbol;
-	if(modifiedJudgeDoc.intervalChange >= 0) {
-		if(modifiedJudgeDoc.intervalChange > 0) {
+	if(interimChange >= 0) {
+		if(interimChange > 0) {
 			changeColour = "GREEN";
 			changeSignSymbol = "+";
 		} else {
@@ -237,8 +280,8 @@ function generateInterimText(modifiedJudgeDoc) {
 		changeColour = "RED";
 		changeSignSymbol = "-";
 	}
-	const changeText = TextFormatter.digitiseNumber(Math.abs(modifiedJudgeDoc.intervalChange), 6, changeColour, changeSignSymbol, "%"); // Absolute value or "--" will happen
-	const quantityText = TextFormatter.digitiseNumber(modifiedJudgeDoc.judgedInInterval);
+	const changeText = TextFormatter.digitiseNumber(Math.abs(interimChange), 6, changeColour, changeSignSymbol, "%"); // Absolute value or "--" will happen
+	const quantityText = TextFormatter.digitiseNumber(judgedInInterim);
 	const hiddenGreyCharacterLength = Coloriser.getColorCharacterLength("GREY") * 4;
 	const hiddenColorCharacterLength = Coloriser.getColorCharacterLength("WHITE", changeColour);
 
@@ -247,8 +290,8 @@ function generateInterimText(modifiedJudgeDoc) {
 	return interimText;
 }
 
-function generateTotalText(modifiedJudgeDoc) {
-	return TextFormatter.digitiseNumber(modifiedJudgeDoc.currentJudgedTotal);
+function generateTotalText(currentJudgedTotal) {
+	return TextFormatter.digitiseNumber(currentJudgedTotal);
 }
 
 const openStatuses = ["AWAITING DECISION", "AWAITING VETO", "PENDING APPROVAL"];

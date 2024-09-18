@@ -3,12 +3,12 @@ const addModelExecutor = require("./utility/addModelExecutor");
 
 const infoSchema = new mongoose.Schema({
 	id: {
-		type: String,
-		required: true
+		type     : String,
+		required : true
 	},
 	data: {
-		type: String,
-		required: true
+		type     : String,
+		required : true
 	}
 });
 

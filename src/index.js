@@ -5,16 +5,7 @@ const mongoose = require("mongoose");
 
 const Submission = require("./mongo/Submission");
 
-const getAllFilepaths = require("./utility/files/getAllFilepaths");
-const getLocalCommands = require("./utility/files/getLocalCommands");
 const handleVetoJudgement = require("./utility/discord/submissionsVeto/handleVetoJudgement");
-const getUnjudgedThreads = require("./utility/discord/threads/getUnjudgedThreads");
-const getAllThreads = require("./utility/discord/threads/getAllThreads");
-const hasReacted = require("./utility/discord/reactions/hasReacted");
-const capitalise = require("./utility/capitalise");
-const color = require("./utility/Coloriser");
-const Coloriser = require("./utility/Coloriser");
-const TextFormatter = require("./utility/TextFormatter");
 const getAllExports = require("./utility/files/getAllExports");
 
 client = new Client({
@@ -37,11 +28,13 @@ client = new Client({
 	console.log("Connected to Mongoose!");
 
 	loadCommands();
-	loadButtons();
 	registerListeners();
 	await client.login(process.env.TOKEN);
 	await checkChannels();
 	startPendingCountdowns();
+
+	const c = await client.channels.fetch(process.env.SUBMISSIONS_INTAKE_ID);
+	c.send({embeds: [new EmbedBuilder().setTitle("test").setDescription("```│ 003 │ TLA Submissions  │ 00001  (00-83%)     │ 00007 │```")]})
 })();
 
 function loadCommands() {
@@ -55,11 +48,6 @@ function loadCommands() {
 			console.warn(`Command "${command.data.name}" is missing a required "data" or "execute" property.`);
 		}
 	}
-}
-
-function loadButtons() {
-	client.buttons = new Collection();
-
 }
 
 function registerListeners() {
