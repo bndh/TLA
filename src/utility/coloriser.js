@@ -1,14 +1,14 @@
 class Coloriser { // TODO americanise all colours
 	static Colors = new Map([ // TODO Store externally or interface env variables or enum
-		["RED", "\u001b[2;31m"], //    0
-		["YELLOW", "\u001b[2;33m"], // 1
-		["GREEN", "\u001b[2;32m"], //  2
-		["TEAL", "\u001b[2;36m"], //   3
-		["BLUE", "\u001b[2;34m"], //   4
-		["PINK", "\u001b[2;35m"], //   5
-		["GREY", "\u001b[2;30m"], //   6
+		["RED", "\u001b[0;31m"], //    0
+		["YELLOW", "\u001b[0;33m"], // 1
+		["GREEN", "\u001b[0;32m"], //  2
+		["TEAL", "\u001b[0;36m"], //   3
+		["BLUE", "\u001b[0;34m"], //   4
+		["PINK", "\u001b[0;35m"], //   5
+		["GREY", "\u001b[0;30m"], //   6
 		["DEFAULT", "\u001b[0m"], //   7
-		["WHITE", "\u001b[2;37m"] //   8
+		["WHITE", "\u001b[0;37m"] //   8
 	]);
 
 	static color(text, colorCode) {
@@ -44,7 +44,7 @@ class Coloriser { // TODO americanise all colours
 	}
 
 	static colorArray(textArray, indexTransformer) {
-		const colouredArray = [textArray.length];
+		const colouredArray = Array(textArray.length);
 		for(let i = 0; i < textArray.length; i++) {
 			const colorCode = indexTransformer.call(null, i);
 			colouredArray[i] = this.color(textArray[i], colorCode);
@@ -53,7 +53,7 @@ class Coloriser { // TODO americanise all colours
 	}
 
 	static colorFromSequence(textArray, codeSequence) {
-		const colouredArray = [textArray.length];
+		const colouredArray = Array(textArray.length);
 		for(let i = 0; i < textArray.length; i++) {
 			colouredArray[i] = this.color(textArray[i], codeSequence[i]);
 		}

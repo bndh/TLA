@@ -28,43 +28,61 @@ module.exports = {
 		.setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 	async execute(interaction) {
 		const deferPromise = interaction.deferReply();
-
-		const auditEmbed = await generateAuditEmbed(interaction.client);
-		const actionRow = generateActionRow();
+	
+		const auditees = await prepareAuditees();
+		const visibleAuditees = auditees.slice(0, parseInt(process.env.AUDITEES_PER_PAGE));
+		const sortedAuditees = visibleAuditees.sort((auditeeA, auditeeB) => auditeeB.judgedInInterim - auditeeA.judgedInInterim);
+		const auditEmbed = await generateAuditEmbed(sortedAuditees, auditees.length);
+		const actionRow = generateActionRow(auditees.length);
 
 		await deferPromise;
 		interaction.editReply({embeds: [auditEmbed], components: [actionRow]});
-	}
+	},
+	generateJudgeTableBlock, // Used externally in page turning mechanisms
+	combineAuditDescriptionParts
+};
+
+async function prepareAuditees() {
+	const judgeDocs = await Judge.enqueue(() => Judge.find({}));
+
+	const auditees = await Promise.all(judgeDocs.map(judgeDoc => new Promise(async (resolve) => {
+		const user = await client.users.fetch(judgeDoc.userId);
+		return resolve(await createAuditee(judgeDoc, user.username));
+	})));
+	return auditees;
 }
 
-async function generateAuditEmbed(client) {
+async function generateAuditEmbed(sortedAuditees, totalAuditees) {
 	return new EmbedBuilder() // Everything except 
 		.setAuthor({name: "TLA Admin Team", iconURL: "https://cdn.discordapp.com/emojis/1198512672585547917.webp?size=96&quality=lossless", url: "https://www.youtube.com/@bndh4409"})
 		.setTitle("__*JUDGE AUDIT REPORT*__")
-		.setFooter({text: "Page 1 of 10", iconURL: "https://images.emojiterra.com/twitter/v14.0/512px/1f4c4.png"})
+		.setFooter({text: generateFooterText(totalAuditees), iconURL: "https://images.emojiterra.com/twitter/v14.0/512px/1f4c4.png"})
 		.setColor(process.env.AUDIT_COLOR)
-		.setDescription(await generateDescriptionText(client));
+		.setDescription(await generateDescriptionText(sortedAuditees));
 }
 
-function generateActionRow() {
+function generateActionRow(auditeeCount) {
 	const nextPageButton = new ButtonBuilder()
 		.setCustomId("next")
+		.setDisabled(auditeeCount <= parseInt(process.env.AUDITEES_PER_PAGE)) // Indicates that the first page is the last page
 		.setEmoji("➡️")
 		.setStyle(ButtonStyle.Secondary);
 	const previousPageButton = new ButtonBuilder()
 		.setCustomId("previous")
+		.setDisabled(true) // Always disabled on page 1
 		.setEmoji("⬅️")
 		.setStyle(ButtonStyle.Secondary);
+	
 	const searchButton = new ButtonBuilder()
 		.setCustomId("search")
 		.setLabel("Search")
 		.setEmoji("🔎")
-		.setStyle(ButtonStyle.Success);
+		.setStyle(ButtonStyle.Primary);
 	const helpButton = new ButtonBuilder()
 		.setCustomId("help")
 		.setLabel("Help")
 		.setEmoji("❓")
-		.setStyle(ButtonStyle.Success);
+		.setStyle(ButtonStyle.Primary);
 
 	return new ActionRowBuilder()
 		.setComponents(previousPageButton, searchButton, helpButton, nextPageButton);
@@ -73,24 +91,23 @@ function generateActionRow() {
 function snapshotJudgeData() {
 	
 }
+
+function generateFooterText(totalAuditees, pageNumber = 1) {
+	const maxPages = Math.ceil(totalAuditees / parseInt(process.env.AUDITEES_PER_PAGE));
+	return `Page ${pageNumber} of ${maxPages}`;
+}
+
 // TODO check out if we can fix the blue basckgrounding
-async function generateDescriptionText(client) {
+async function generateDescriptionText(sortedAuditees) {
 	const descriptionParts = await Promise.all([
 		generateDateText(),
-		generateJudgeTableBlock(client),
+		generateJudgeTableBlock(sortedAuditees),
 		generateSubmissionTableBlock(),
 		generateTotalBlock()
 	]);
-	const dateText = descriptionParts[0];
-	const judgeTableEmbed = descriptionParts[1];
-	const submissionTableEmbed = descriptionParts[2];
-	const totalEmbed = descriptionParts[3];
 
-	return dateText + "\n\n" +
-		   "**" + judgeTableEmbed + "** " +  // Lack of \n packs them close together but still on different lines; space included after the double asterisk or they conflict
-		   "**" + submissionTableEmbed + "** " +
-		   "**_" + totalEmbed + "_**";
-	}
+	return combineAuditDescriptionParts(...descriptionParts);
+}
 
 async function generateDateText() {
 	const snapshotCreationInfo = await Info.findOne({id: "snapshotCreationTime"}).select({data: 1, _id: 0}).exec();
@@ -102,20 +119,11 @@ async function generateDateText() {
 	return "_" + formattedSnapshotTime + " -> " + formattedCurrentTime + "_";
 }
 
-async function generateJudgeTableBlock(client) {
+async function generateJudgeTableBlock(sortedAuditees, startingIndex = 0) { // Defined startingIndex for outside use
 	const colouredTopFrame = Coloriser.color(process.env.AUDIT_FRAME_TOP, "GREY");
 	const colouredTagFrame = Coloriser.colorFromMarkers(process.env.AUDIT_FRAME_TAG);
 	const colouredMidFrame = Coloriser.color(process.env.AUDIT_FRAME_MID, "GREY");
-
-	const judgeDocs = await Judge.enqueue(() => Judge.find({}));
-
-	const auditees = await Promise.all(judgeDocs.map(judgeDoc => new Promise(async (resolve) => {
-		const user = await client.users.fetch(judgeDoc.userId);
-		return resolve(await createAuditee(judgeDoc, user.username));
-	})));
-	const sortedAuditees = auditees.sort((auditeeA, auditeeB) => auditeeB.judgedInInterim - auditeeA.judgedInInterim);
-
-	const colouredContents = await generateFormattedJudgeRows(sortedAuditees);
+	const colouredContents = await generateFormattedJudgeRows(sortedAuditees, startingIndex);
 	const colouredBotFrame = Coloriser.color(process.env.AUDIT_FRAME_BOT, "GREY");
 
 	return "```ansi" + "\n" + // Enables colour highlighting
@@ -126,11 +134,15 @@ async function generateJudgeTableBlock(client) {
 		   colouredBotFrame + "```";
 }
 
-async function generateFormattedJudgeRows(auditees, startingIndex = 0) {
+async function generateFormattedJudgeRows(auditees, startingIndex) {
 	let rows = "";
 	for(let i = 0; i < auditees.length; i++) {
 		rows += await generateTableRow(startingIndex + i, auditees[i]) + "\n";
 	}
+	for(let i = auditees.length; i < parseInt(process.env.AUDITEES_PER_PAGE); i++) {
+		rows += Coloriser.color(process.env.AUDIT_FRAME_NIL, "GREY") + "\n";
+	}
+
 	return rows;
 }
 
@@ -179,6 +191,13 @@ async function generateTotalBlock() {
 		   "```";
 }
 
+function combineAuditDescriptionParts(dateText, judgeTableBlock, submissionTableBlock, totalBlock) {
+	return dateText + "\n\n" +
+		   "**" + judgeTableBlock + "** " +  // Discord puts these on different lines despite the lack of \n; with the \n there is a larger gap
+		   "**" + submissionTableBlock + "** " + // Space included after the formatting markdown or it conflicts
+		   "**_" + totalBlock + "_**";
+}
+
 async function createAuditee(judgeDoc, username) {
 	const sizedUsername = TextFormatter.resizeEnd(username, 16, " ", "..");
 	const totalSubmissionsJudged = calculateTotalSubmissionsJudged(judgeDoc.counselledSubmissionIds, judgeDoc.totalSubmissionsClosed);
@@ -215,33 +234,6 @@ function calculateInterimChange(judgedInInterim, snappedJudgedInterim) {
 	}
 }
 
-function attachInterimAndTotalProperties(judgeDocuments) {
-	judgeDocuments.forEach(judgeDoc => {
-		judgeDoc.currentJudgedTotal = judgeDoc.counselledSubmissionIds.length + judgeDoc.totalSubmissionsClosed;
-		if(judgeDoc.snappedJudgedInterim) judgeDoc.judgedInInterim = judgeDoc.currentJudgedTotal - judgeDoc.snappedJudgedTotal; // Conventional flow; not a new judge
-		else judgeDoc.judgedInInterim = judgeDoc.currentJudgedTotal; // A new judge is one implied to have been created since the last snapshot, so we just take judgedInInterim as their currentJudgedTotal
-	});
-}
-
-function sortJudgeDocuments(judgeDocuments) {
-	return judgeDocuments.sort((docA, docB) => docB.judgedInInterim - docA.judgedInInterim);
-}
-
-function attachInterimChange(judgeDoc) { // % change compared to last judgedInInterim value
-	if(judgeDoc.snappedJudgedInterim !== undefined) {
-		if(judgeDoc.snappedJudgedInterim !== 0) {
-			judgeDoc.interimChange = judgeDoc.judgedInInterim / judgeDoc.snappedJudgedInterim * 100; // %
-			judgeDoc.interimChange = -100 + judgeDoc.interimChange; // % change (e.g. 4n, 16b = -75%; 28n, 16b = +75%)
-			judgeDoc.interimChange = Math.min(Math.max(judgeDoc.interimChange, -1000), 1000); // Snap between -1000 and 1000; becomes 999+%
-		} else {
-			if(judgeDoc.judgedInInterim === 0) judgeDoc.interimChange = 0; // 0 judged before, 0 judged now, hence 0
-			else judgeDoc.interimChange = 9999; // ∞ symbol looks too sad so we just say 9999, the max
-		}
-	} else {
-		judgeDoc.interimChange = "???"; // Unique placeholder value: ???%
-	}
-}
-
 async function generateTableRow(index, auditee) {
 	let indexText = generateIndexText(index);
 	let usernameText = generateUserText(auditee.sizedUsername, auditee.judgeType)
@@ -265,7 +257,7 @@ function generateUserText(sizedUsername, judgeType) {
 	return Coloriser.color(sizedUsername, auditeeColorCode);
 }
 
-function generateInterimText(judgedInInterim, interimChange,) {
+function generateInterimText(judgedInInterim, interimChange) {
 	let changeColour;
 	let changeSignSymbol;
 	if(interimChange >= 0) {

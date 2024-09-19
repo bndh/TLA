@@ -126,7 +126,7 @@ async function judgeSetupAndSync(channelManager) {
 }
 
 async function handleJudgeSync(submissionsForum, vetoForum) {
-	const judgeSyncPromises = [2];
+	const judgeSyncPromises = Array(2);
 	judgeSyncPromises[0] = await updateJudges("nominator", [vetoForum]);
 	judgeSyncPromises[1] = await updateJudges("admin", [vetoForum, submissionsForum])
 	await Promise.all(judgeSyncPromises);
@@ -167,7 +167,7 @@ async function handleVetoSync(vetoForum, vetoThreadPromise) {
 				entry.threadId = fetchedThread.id; // Update entry
 				await Submission.enqueue(() => entry.save()); // Need to save here as the new threadId would not be preserved in the handleVetoPending method
 			} else { // Cannot find a videoLink so must abort
-				let deletionPromises = [2];
+				let deletionPromises = Array(2);
 				deletionPromises[0] = fetchedThread.delete("Could not find video during forum sync.");
 				if(entry) {
 					deletionPromises[1] = Submission.enqueue(() => Submission.deleteOne({_id: entry._id}));
@@ -241,7 +241,7 @@ async function handleSubmissionSync(submissionsForum, submissionsThreadPromise) 
 				entry.threadId = fetchedThread.id; // Update entry with new data
 				await Submission.enqueue(() => entry.save()); // Need to save here as the new threadId would not be preserved in the sumbissionApprove/Deny methods
 			} else { // Not salvageable so must delete
-				let deletionPromises = [2];
+				let deletionPromises = Array(2);
 				deletionPromises[0] = fetchedThread.delete("Could not find video during forum sync.");
 				if(entry) {
 					deletionPromises[1] = Submission.enqueue(() => Submission.deleteOne({_id: entry._id}));

@@ -54,7 +54,7 @@ async function updateSubmissionCountInfo(client) {
 		client.channels.fetch(process.env.VETO_FORUM_ID)
 	]);
 
-	const countPromises = [forums.length];
+	const countPromises = Array(forums.length);
 	for(let i = 0; i < forums.length; i++) {
 		countPromises[i] = new Promise(async (resolve) => {
 			const threads = await getAllThreads(forums[i]);
@@ -74,7 +74,7 @@ async function updateSubmissionCountInfo(client) {
 async function snapshotJudges() {
 	const judgeDocuments = await Judge.enqueue(() => Judge.find({}).exec());
 
-	const savePromises = [judgeDocuments.length];
+	const savePromises = Array(judgeDocuments.length);
 	for(let i = 0; i < judgeDocuments.length; i++) {
 		savePromises[i] = new Promise(async (resolve) => {
 			const judgeDocument = judgeDocuments[i];

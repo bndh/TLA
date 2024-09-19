@@ -1,4 +1,5 @@
 const {Events} = require("discord.js");
+const turnPage = require("../utility/discord/buttons/audit/turnPage");
 
 module.exports = {
 	name: Events.InteractionCreate,
@@ -28,5 +29,6 @@ function handleChatInputCommand(interaction) {
 }
 
 function handleButtonInteraction(interaction) {
-	
+	if(interaction.customId === "next") turnPage(interaction, true);
+	else if(interaction.customId === "previous") turnPage(interaction, false);
 }

@@ -66,7 +66,7 @@ async function tallyRegistreeSubmissions(forums, registreeId) {
 	let totalSubmissionsClosed = 0;
 
 	const threadGroups = await Promise.all(forums.map(forum => getAllThreads(forum)));
-	const tallyPromises = [threadGroups.reduce((accumulator, threadGroup) => accumulator + threadGroup.size, 0)]
+	const tallyPromises = Array(threadGroups.reduce((accumulator, threadGroup) => accumulator + threadGroup.size, 0));
 	for(const threads of threadGroups) {
 		if(threads.size === 0) continue;
 		const forum = threads.at(0).parent;

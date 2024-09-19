@@ -7,6 +7,7 @@ const Submission = require("./mongo/Submission");
 
 const handleVetoJudgement = require("./utility/discord/submissionsVeto/handleVetoJudgement");
 const getAllExports = require("./utility/files/getAllExports");
+const { threadId } = require("worker_threads");
 
 client = new Client({
 	intents: [
@@ -32,9 +33,6 @@ client = new Client({
 	await client.login(process.env.TOKEN);
 	await checkChannels();
 	startPendingCountdowns();
-
-	const c = await client.channels.fetch(process.env.SUBMISSIONS_INTAKE_ID);
-	c.send({embeds: [new EmbedBuilder().setTitle("test").setDescription("```│ 003 │ TLA Submissions  │ 00001  (00-83%)     │ 00007 │```")]})
 })();
 
 function loadCommands() {
