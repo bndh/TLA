@@ -1,6 +1,8 @@
 const path = require("path");
-const { ActionRowBuilder, EmbedBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, SlashCommandBuilder } = require("discord.js");
+const { ActionRowBuilder, EmbedBuilder, StringSelectMenuBuilder, SlashCommandBuilder } = require("discord.js");
 const getAllExports = require("../../utility/files/getAllExports");
+const getAllFiles = require("../../utility/files/getAllFiles");
+const TextFormatter = require("../../utility/TextFormatter");
 // TODO generate some of this staticaclly 
 module.exports = {
 	data: new SlashCommandBuilder()
@@ -20,25 +22,32 @@ module.exports = {
 	
 		let menuResponse;
 		try {
-			menuResponse = await replyResponse.awaitMessageComponent({time: 90_000}); // No need for filter users as the response is ephemeral
+			menuResponse = await replyResponse.awaitMessageComponent({time: 5_000}); // No need for filter users as the response is ephemeral
 		} catch(error) {
 			interaction.editReply({
-				embeds: [generateNoTimeEmbed()],
+				embeds: [generateErrorEmbed(
+					"You took **too long**...\nYou may try again by re-using the **/help** command.",
+					{text: "Time Limit: 0s", iconURL: "https://em-content.zobj.net/source/twitter/408/timer-clock_23f2-fe0f.png"}
+				)],
 				components: [new ActionRowBuilder().setComponents(helpMenu.setDisabled(true))]
 			});
 			return;
 		}
 		
-		// TODO respond if no help category found
-		menuResponse.deferUpdate();
+		await menuResponse.deferUpdate();
 		for(const helpCategory of helpCategories) {
 			if(menuResponse.values.includes(helpCategory.value)) {
 				interaction.editReply({
-					embeds: [helpCategory.generateEmbed()]
+					embeds: [generateCategoryEmbed(helpCategory)],
+					components: [new ActionRowBuilder().setComponents(helpMenu.setDisabled(true))]
 				});
 				return;
 			}
-		}
+		} // No category found
+		menuResponse.editReply({
+			embeds: [generateErrorEmbed("**Bad request!** That option **does not exist**...\nYou may try again by re-using the **/help** command.")],
+			components: [new ActionRowBuilder().setComponents(helpMenu.setDisabled(true))]
+		})
 	} 
 };
 
@@ -65,10 +74,38 @@ function generateHelpMenu(helpCategories) {
 		.setOptions(...helpCategories);
 }
 
-function generateNoTimeEmbed() {
+function generateErrorEmbed(description, footer = undefined) {
+	const embedBuilder = new EmbedBuilder()
+		.setDescription(description)
+		.setAuthor({name: "TLA Bot Help", iconURL: process.env.EXTREME_DEMON_URL})
+		.setColor(process.env.FAIL_COLOR);
+	if(footer) embedBuilder.setFooter(footer);
+	return embedBuilder;
+}
+
+function generateCategoryEmbed(helpCategory) {
+	const termFolderPath = path.join(__dirname, "helpModules", `${helpCategory.value}Terms`);
+	const terms = getAllFiles(termFolderPath) // Assumes folder depth of 1
+		.sort((fileA, fileB) => parseInt(fileA.name.match(/\d+/)) - parseInt(fileB.name.match(/\d+/))) // Sort according to number (asc.)
+		.map(file => require(path.join(termFolderPath, file.name)));
+
+	let description = `The **FAQ Section** currently has **${terms.length}** terms:`;
+	for(const term of terms) {
+		const titleText = `${term.emoji} __**${term.name}**__`;
+		const definitionText = TextFormatter.bulletText(term.definition);
+		description += "\n\n" +
+					   titleText + "\n" +
+					   definitionText;
+
+		if(term.example) {
+			let exampleText = term.example.map(exampleText => `_${exampleText}_`);
+			exampleText = TextFormatter.bulletText(exampleText, 1);
+			description += `\n- _Example:_\n${exampleText}`;
+		}
+	}
+
 	return new EmbedBuilder()
-			.setDescription("You took **too long**...\nYou may try again by re-using the **/help** command.")
-			.setAuthor({name: "TLA Bot Help", iconURL: process.env.EXTREME_DEMON_URL})
-			.setFooter({text: "Time Limit: 0s", iconURL: "https://em-content.zobj.net/source/twitter/408/timer-clock_23f2-fe0f.png"})
-			.setColor(process.env.FAIL_COLOR);
+		.setDescription(description)
+		.setAuthor({name: `TLA Bot ${helpCategory.label} Section`, iconURL: helpCategory.emojiURL})
+		.setColor(process.env.NEUTRAL_COLOR);
 }
