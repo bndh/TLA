@@ -38,7 +38,7 @@ client = new Client({
 function loadCommands() {
 	client.commands = new Collection(); // Attach a commands property to our client which is accessible in other files
 
-	const commands = getAllExports(path.join(__dirname, "commands"));
+	const commands = getAllExports(path.join(__dirname, "commands"), file => !file.name.toLowerCase().endsWith("modules"));
 	for(const command of commands) {
 		if("data" in command && "execute" in command) {
 			client.commands.set(command.data.name, command); // Set a new item in the Collection with key as the command name and value as the command module itself

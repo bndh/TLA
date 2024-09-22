@@ -75,6 +75,15 @@ class TextFormatter {
 			);
 		}
 	}
+
+	static bulletText(text, indentCount = 0) {
+		let returnText = "";
+		for(let i = 0; i < text.length; i++) {
+			const bulletPoint = " ".repeat(indentCount * 2) + "-" // Need two spaces for an indent to count
+			returnText += `${i ? "\n" : ""}${bulletPoint} ${text[i]}`;
+		}
+		return returnText;
+	}
 }
 
 // TODO adding prototype methods https://stackoverflow.com/questions/1431094/how-do-i-replace-a-character-at-a-specific-index-in-javascript#:~:text=Javascript%20strings%20are%20immutable%2C%20they,same%20string%20is%20ONE%20object.

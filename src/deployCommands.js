@@ -4,7 +4,7 @@ const path = require("path");
 const getAllExports = require("./utility/files/getAllExports");
 
 const commands = [];
-for(const command of getAllExports(path.join(__dirname, "commands"))) {
+for(const command of getAllExports(path.join(__dirname, "commands"), file => !file.name.toLowerCase().endsWith("modules"))) {
 	if("data" in command && "execute" in command) {
 		commands.push(command.data.toJSON());
 	} else {

@@ -1,6 +1,6 @@
 require("dotenv").config();
 
-const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, time, TimestampStyles, ButtonBuilder, ButtonStyle, ActionRow, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder } = require("discord.js");
+const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, time, TimestampStyles, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require("discord.js");
 
 const Info = require("../../mongo/Info");
 const Judge = require("../../mongo/Judge");
@@ -54,13 +54,13 @@ async function prepareAuditees() {
 
 async function generateAuditEmbed(sortedAuditees, totalAuditees) {
 	return new EmbedBuilder() // Everything except 
-		.setAuthor({name: "TLA Admin Team", iconURL: "https://cdn.discordapp.com/emojis/1198512672585547917.webp?size=96&quality=lossless", url: "https://www.youtube.com/@bndh4409"})
-		.setTitle("__*JUDGE AUDIT REPORT*__")
+		.setAuthor({name: "TLA Admin Team", iconURL: process.env.INSANE_DEMON_URL, url: "https://www.youtube.com/@bndh4409"})
+		.setTitle("__JUDGE AUDIT REPORT__")
 		.setFooter({text: generateFooterText(totalAuditees), iconURL: "https://images.emojiterra.com/twitter/v14.0/512px/1f4c4.png"})
-		.setColor(process.env.AUDIT_COLOR)
+		.setColor(process.env.SUCCESS_COLOR)
 		.setDescription(await generateDescriptionText(sortedAuditees));
 }
-
+// TODO disable old report buttons
 function generateActionRow(auditeeCount) {
 	const nextPageButton = new ButtonBuilder()
 		.setCustomId("next")

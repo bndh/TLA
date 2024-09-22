@@ -1,4 +1,4 @@
-const {Events} = require("discord.js");
+const {Events, PermissionFlagsBits, EmbedBuilder} = require("discord.js");
 const turnPage = require("../utility/discord/buttons/audit/turnPage");
 
 module.exports = {
@@ -9,7 +9,7 @@ module.exports = {
 	}
 };
 
-function handleChatInputCommand(interaction) {
+async function handleChatInputCommand(interaction) {
 	const command = interaction.client.commands.get(interaction.commandName); // The client instance provided by interaction is the same as the client defined earlier
 	if(!command) {
 		console.error(`No command matching ${interaction.commandName} was found.`);
@@ -17,7 +17,7 @@ function handleChatInputCommand(interaction) {
 	}
 
 	try { // TODO Fix  this /used to have awaits
-		command.execute(interaction);
+		await command.execute(interaction);
 	} catch(error) {
 		console.error(error);
 		if(interaction.replied || interaction.deferred) {
@@ -28,7 +28,30 @@ function handleChatInputCommand(interaction) {
 	}
 }
 
-function handleButtonInteraction(interaction) {
-	if(interaction.customId === "next") turnPage(interaction, true);
-	else if(interaction.customId === "previous") turnPage(interaction, false);
+async function handleButtonInteraction(interaction) {
+	if(interaction.customId === "search") {
+
+	}
+	
+	if(interaction.memberPermissions.has(PermissionFlagsBits.Administrator)) {
+		if(interaction.customId === "next") {
+			turnPage(interaction, true);
+			return;
+		}
+		else if(interaction.customId === "previous") {
+			turnPage(interaction, false);
+			return;
+		}
+	} else {
+		await interaction.deferUpdate();
+		interaction.reply({
+			ephemeral: true,
+			embeds: [
+				new EmbedBuilder()
+					.setAuthor({name: "Something went wrong!", iconURL: process.env.EXTREME_DEMON_URL})
+					.setDescription("That function is **admin-only**!\nIf you believe this is **incorrect**, please contact _@gamingpharoah_")
+					.setColor(process.env.FAIL_COLOR)
+			]
+		});
+	}
 }
