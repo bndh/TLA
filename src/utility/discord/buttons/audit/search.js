@@ -6,17 +6,25 @@ const { EmbedBuilder } = require("discord.js");
 module.exports = async (interaction) => {
 	const deferPromise = interaction.deferReply({ephemeral: true});
 
+
+
 	const auditee = await Auditee.findOne({userId: interaction.user.id}).exec();
 	if(!auditee) {
 		await deferPromise;
 		interaction.editReply({embeds: [generateNotFoundEmbed()]});
-	}
-	const auditeeBlock = await generateJudgeTableBlock(interaction.client, [auditee], 0, 1);
-	const user = await interaction.client.users.fetch(interaction.user.id);
+		return;
+	}   
+
+	const auditeeBlockPromise = new Promise(async resolve => {
+		const index = await Auditee.countDocuments({judgedInInterim: {$lt: auditee.judgedInInterim}}).exec();
+		resolve(await generateJudgeTableBlock(interaction.client, [auditee], index, 1));
+	});
+	const userPromise = interaction.client.users.fetch(interaction.user.id);
+	const performanceEmbedArguments = await Promise.all([auditeeBlockPromise, userPromise]);
 
 	await deferPromise;
 	interaction.editReply({
-		embeds: [generatePerformanceEmbed(auditeeBlock, user)]
+		embeds: [generatePerformanceEmbed(...performanceEmbedArguments)]
 	});
 };
 

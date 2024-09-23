@@ -17,7 +17,8 @@ module.exports = async (buttonInteraction, right = true) => {
 	const auditeesPromise = await Auditee.find({})
 										 .sort({judgedInInterim: -1}) // Sort descending
 										 .skip(newPageIndex * parseInt(process.env.AUDITEES_PER_PAGE))
-										 .limit(parseInt(process.env.AUDITEES_PER_PAGE));
+										 .limit(parseInt(process.env.AUDITEES_PER_PAGE))
+										 .exec();
 	
 	const dateText = isolateDateText(auditEmbed.description);
 	const submissionAndTotalBlocks = isolateSubmissionAndTotalBlocks(auditEmbed.description); // [0] = submissionsTable, [1] = totalBlock
