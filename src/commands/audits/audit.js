@@ -28,12 +28,13 @@ module.exports = {
 		.setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 	async execute(interaction) {
 		const deferPromise = interaction.deferReply();
-	
-		const auditees = await prepareAuditees();
-		const visibleAuditees = auditees.slice(0, parseInt(process.env.AUDITEES_PER_PAGE));
+	// TODO delete old auditees
+		const allAuditees = await prepareAuditees();
+		const visibleAuditees = allAuditees.slice(0, parseInt(process.env.AUDITEES_PER_PAGE));
 		const sortedAuditees = visibleAuditees.sort((auditeeA, auditeeB) => auditeeB.judgedInInterim - auditeeA.judgedInInterim);
-		const auditEmbed = await generateAuditEmbed(sortedAuditees, auditees.length);
-		const actionRow = generateActionRow(auditees.length);
+
+		const auditEmbed = await generateAuditEmbed(interaction.client, sortedAuditees, allAuditees.length);
+		const actionRow = generateActionRow(allAuditees.length);
 
 		await deferPromise;
 		interaction.editReply({embeds: [auditEmbed], components: [actionRow]});
@@ -44,21 +45,20 @@ module.exports = {
 
 async function prepareAuditees() {
 	const judgeDocs = await Judge.enqueue(() => Judge.find({}));
-
+// TODO rewrite
 	const auditees = await Promise.all(judgeDocs.map(judgeDoc => new Promise(async (resolve) => {
-		const user = await client.users.fetch(judgeDoc.userId);
-		return resolve(await createAuditee(judgeDoc, user.username));
+		return resolve(await createOrUpdateAuditee(judgeDoc));
 	})));
 	return auditees;
 }
 
-async function generateAuditEmbed(sortedAuditees, totalAuditees) {
+async function generateAuditEmbed(client, sortedAuditees, totalAuditees) {
 	return new EmbedBuilder() // Everything except 
 		.setAuthor({name: "TLA Admin Team", iconURL: process.env.INSANE_DEMON_URL, url: "https://www.youtube.com/@bndh4409"})
 		.setTitle("__JUDGE AUDIT REPORT__")
 		.setFooter({text: generateFooterText(totalAuditees), iconURL: "https://images.emojiterra.com/twitter/v14.0/512px/1f4c4.png"})
 		.setColor(process.env.SUCCESS_COLOR)
-		.setDescription(await generateDescriptionText(sortedAuditees));
+		.setDescription(await generateDescriptionText(client, sortedAuditees));
 }
 // TODO disable old report buttons
 function generateActionRow(auditeeCount) {
@@ -78,14 +78,9 @@ function generateActionRow(auditeeCount) {
 		.setLabel("Search")
 		.setEmoji("🔎")
 		.setStyle(ButtonStyle.Primary);
-	const helpButton = new ButtonBuilder()
-		.setCustomId("help")
-		.setLabel("Help")
-		.setEmoji("❓")
-		.setStyle(ButtonStyle.Primary);
 
 	return new ActionRowBuilder()
-		.setComponents(previousPageButton, searchButton, helpButton, nextPageButton);
+		.setComponents(previousPageButton, searchButton, nextPageButton);
 }
 
 function snapshotJudgeData() {
@@ -98,10 +93,10 @@ function generateFooterText(totalAuditees, pageNumber = 1) {
 }
 
 // TODO check out if we can fix the blue basckgrounding
-async function generateDescriptionText(sortedAuditees) {
+async function generateDescriptionText(client, sortedAuditees) {
 	const descriptionParts = await Promise.all([
 		generateDateText(),
-		generateJudgeTableBlock(sortedAuditees),
+		generateJudgeTableBlock(client, sortedAuditees),
 		generateSubmissionTableBlock(),
 		generateTotalBlock()
 	]);
@@ -119,11 +114,11 @@ async function generateDateText() {
 	return "_" + formattedSnapshotTime + " -> " + formattedCurrentTime + "_";
 }
 
-async function generateJudgeTableBlock(sortedAuditees, startingIndex = 0) { // Defined startingIndex for outside use
+async function generateJudgeTableBlock(client, sortedAuditees, startingIndex = 0, maxPerPage = process.env.AUDITEES_PER_PAGE) { // Defined startingIndex and maxPerPage for external use
 	const colouredTopFrame = Coloriser.color(process.env.AUDIT_FRAME_TOP, "GREY");
 	const colouredTagFrame = Coloriser.colorFromMarkers(process.env.AUDIT_FRAME_TAG);
 	const colouredMidFrame = Coloriser.color(process.env.AUDIT_FRAME_MID, "GREY");
-	const colouredContents = await generateFormattedJudgeRows(sortedAuditees, startingIndex);
+	const colouredContents = await generateFormattedJudgeRows(client, sortedAuditees, startingIndex, maxPerPage);
 	const colouredBotFrame = Coloriser.color(process.env.AUDIT_FRAME_BOT, "GREY");
 
 	return "```ansi" + "\n" + // Enables colour highlighting
@@ -134,12 +129,15 @@ async function generateJudgeTableBlock(sortedAuditees, startingIndex = 0) { // D
 		   colouredBotFrame + "```";
 }
 
-async function generateFormattedJudgeRows(auditees, startingIndex) {
+async function generateFormattedJudgeRows(client, auditees, startingIndex, maxPerPage) {
+	const auditeeUserData = await Promise.all(auditees.map(async auditee => client.users.fetch(auditee.userId)));
+	const auditeeDisplayNames = auditeeUserData.map(user => user.displayName);
+
 	let rows = "";
 	for(let i = 0; i < auditees.length; i++) {
-		rows += await generateTableRow(startingIndex + i, auditees[i]) + "\n";
+		rows += generateTableRow(startingIndex + i, auditees[i], auditeeDisplayNames[i]) + "\n";
 	}
-	for(let i = auditees.length; i < parseInt(process.env.AUDITEES_PER_PAGE); i++) {
+	for(let i = auditees.length; i < parseInt(maxPerPage); i++) {
 		rows += Coloriser.color(process.env.AUDIT_FRAME_NIL, "GREY") + "\n";
 	}
 
@@ -198,17 +196,16 @@ function combineAuditDescriptionParts(dateText, judgeTableBlock, submissionTable
 		   "**_" + totalBlock + "_**";
 }
 
-async function createAuditee(judgeDoc, username) {
-	const sizedUsername = TextFormatter.resizeEnd(username, 16, " ", "..");
+async function createOrUpdateAuditee(judgeDoc) {
 	const totalSubmissionsJudged = calculateTotalSubmissionsJudged(judgeDoc.counselledSubmissionIds, judgeDoc.totalSubmissionsClosed);
 	const judgedInInterim = calculateJudgedInInterim(totalSubmissionsJudged, judgeDoc.snappedJudgedInterim, judgeDoc.snappedJudgedTotal);
 	const interimChange = calculateInterimChange(judgedInInterim, judgeDoc.snappedJudgedInterim);
-	
+	// TODO maybe refer to judge doc
 	return updateOrCreate(
 		Auditee,
-		{sizedUsername: sizedUsername},
+		{userId: judgeDoc.userId},
 		{judgeType: judgeDoc.judgeType, judgedInInterim: judgedInInterim, interimChange: interimChange, totalSubmissionsJudged: totalSubmissionsJudged},
-		{sizedUsername: sizedUsername, judgeType: judgeDoc.judgeType, judgedInInterim: judgedInInterim, interimChange: interimChange, totalSubmissionsJudged: totalSubmissionsJudged}
+		{userId: judgeDoc.userId, judgeType: judgeDoc.judgeType, judgedInInterim: judgedInInterim, interimChange: interimChange, totalSubmissionsJudged: totalSubmissionsJudged}
 	);
 }
 
@@ -234,13 +231,13 @@ function calculateInterimChange(judgedInInterim, snappedJudgedInterim) {
 	}
 }
 
-async function generateTableRow(index, auditee) {
+function generateTableRow(index, auditee, auditeeDisplayName) {
 	let indexText = generateIndexText(index);
-	let usernameText = generateUserText(auditee.sizedUsername, auditee.judgeType)
+	let displayNameText = generateUserText(auditeeDisplayName, auditee.judgeType)
 	let interimText = generateInterimText(auditee.judgedInInterim, auditee.interimChange);
 	let totalText = generateTotalText(auditee.totalSubmissionsJudged);
 
-	return `${DIVIDER} ${indexText} ${DIVIDER} ${usernameText} ${DIVIDER} ${interimText} ${DIVIDER} ${totalText} ${DIVIDER}`;
+	return `${DIVIDER} ${indexText} ${DIVIDER} ${displayNameText} ${DIVIDER} ${interimText} ${DIVIDER} ${totalText} ${DIVIDER}`;
 }
 
 function generateIndexText(index) {
@@ -250,11 +247,13 @@ function generateIndexText(index) {
 	return indexText;
 }
 
-function generateUserText(sizedUsername, judgeType) {
+function generateUserText(displayName, judgeType) {
+	const sizedDisplayName = TextFormatter.resizeEnd(displayName, 16, " ", "..");
+
 	let auditeeColorCode = 7;
 	if(judgeType === "admin") auditeeColorCode = +process.env.ADMIN_COLOR_CODE;
 	else if(judgeType === "nominator") auditeeColorCode = +process.env.NOMINATOR_COLOR_CODE;
-	return Coloriser.color(sizedUsername, auditeeColorCode);
+	return Coloriser.color(sizedDisplayName, auditeeColorCode);
 }
 
 function generateInterimText(judgedInInterim, interimChange) {

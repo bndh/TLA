@@ -23,7 +23,7 @@ module.exports = async (buttonInteraction, right = true) => {
 	const submissionAndTotalBlocks = isolateSubmissionAndTotalBlocks(auditEmbed.description); // [0] = submissionsTable, [1] = totalBlock
 	
 	const sortedAuditees = await auditeesPromise;
-	const judgeTableBlock = await generateJudgeTableBlock(sortedAuditees, newPageIndex * parseInt(process.env.AUDITEES_PER_PAGE));
+	const judgeTableBlock = await generateJudgeTableBlock(buttonInteraction.client, sortedAuditees, newPageIndex * parseInt(process.env.AUDITEES_PER_PAGE));
 
 	const editedEmbedBuilder = EmbedBuilder.from(auditEmbed)
 		.setDescription(combineAuditDescriptionParts(dateText, judgeTableBlock, ...submissionAndTotalBlocks))

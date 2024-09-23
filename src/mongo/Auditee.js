@@ -1,14 +1,13 @@
 const mongoose = require("mongoose");
 
 const auditeeSchema = new mongoose.Schema({ // Must store all data due to overwrite setting on /audit
-	sizedUsername: {
+	userId: {
 		type      : String,
-		required  : true,
-		maxLength : 16 // Maxes correspond with the size of the field, any larger and they wont fit
+		required  : true
 	},
 	judgeType: {
 		type      : String,
-		required  : true,
+		required  : true
 	},
 	judgedInInterim: {
 		type      : Number,

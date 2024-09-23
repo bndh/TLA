@@ -9,7 +9,7 @@ module.exports = {
 		.setName("help")
 		.setDescription("Gives helpful information about all aspects of TLA."),
 	async execute(interaction) {
-		await interaction.deferReply({ephemeral: true});
+		const replyPromise = interaction.deferReply({ephemeral: true});
 
 		const helpCategories = getAllExports(path.join(__dirname, "helpModules"), file => !file.isDirectory());
 		
@@ -24,6 +24,7 @@ module.exports = {
 		try {
 			menuResponse = await replyResponse.awaitMessageComponent({time: 5_000}); // No need for filter users as the response is ephemeral
 		} catch(error) {
+			await replyPromise;
 			interaction.editReply({
 				embeds: [generateErrorEmbed(
 					"You took **too long**...\nYou may try again by re-using the **/help** command.",

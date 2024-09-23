@@ -1,5 +1,6 @@
 const {Events, PermissionFlagsBits, EmbedBuilder} = require("discord.js");
 const turnPage = require("../utility/discord/buttons/audit/turnPage");
+const search = require("../utility/discord/buttons/audit/search");
 
 module.exports = {
 	name: Events.InteractionCreate,
@@ -30,7 +31,8 @@ async function handleChatInputCommand(interaction) {
 
 async function handleButtonInteraction(interaction) {
 	if(interaction.customId === "search") {
-
+		search(interaction);
+		return;
 	}
 	
 	if(interaction.memberPermissions.has(PermissionFlagsBits.Administrator)) {
@@ -49,7 +51,7 @@ async function handleButtonInteraction(interaction) {
 			embeds: [
 				new EmbedBuilder()
 					.setAuthor({name: "Something went wrong!", iconURL: process.env.EXTREME_DEMON_URL})
-					.setDescription("That function is **admin-only**!\nIf you believe this is **incorrect**, please contact _@gamingpharoah_")
+					.setDescription("That function is **admin-only**!\nIf you believe this is **incorrect**, please contact _**@gamingpharoah**_")
 					.setColor(process.env.FAIL_COLOR)
 			]
 		});
