@@ -1,6 +1,4 @@
 const {Collection, Events, PermissionFlagsBits, EmbedBuilder} = require("discord.js");
-const turnPage = require("../utility/discord/buttons/audit/helperModules/turnPage");
-const search = require("../utility/discord/buttons/audit/search");
 const getAllExports = require("../utility/files/getAllExports");
 const path = require("path");
 

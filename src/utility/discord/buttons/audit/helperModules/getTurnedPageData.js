@@ -3,11 +3,8 @@ const Auditee = require("../../../../../mongo/Auditee");
 const { generateJudgeTableBlock, combineAuditDescriptionParts } = require("../../../../../commands/audits/audit");
 const { EmbedBuilder, ButtonBuilder, ActionRowBuilder } = require("discord.js");
 
-module.exports = async (buttonInteraction, right = true) => {
+module.exports = async (client, auditEmbed, auditActionRow, right = true) => {
 	const pageModifier = right ? 1 : -1;
-
-	const auditEmbed = buttonInteraction.message.embeds[0];
-	if(!auditEmbed) return;
 
 	const pageNumbers = auditEmbed.footer.text.match(/\d+/g)
 		.map(numberText => parseInt(numberText));
@@ -24,7 +21,7 @@ module.exports = async (buttonInteraction, right = true) => {
 	const submissionAndTotalBlocks = isolateSubmissionAndTotalBlocks(auditEmbed.description); // [0] = submissionsTable, [1] = totalBlock
 	
 	const sortedAuditees = await auditeesPromise;
-	const judgeTableBlock = await generateJudgeTableBlock(buttonInteraction.client, sortedAuditees, newPageIndex * parseInt(process.env.AUDITEES_PER_PAGE));
+	const judgeTableBlock = await generateJudgeTableBlock(client, sortedAuditees, newPageIndex * parseInt(process.env.AUDITEES_PER_PAGE));
 
 	const editedEmbedBuilder = EmbedBuilder.from(auditEmbed)
 		.setDescription(combineAuditDescriptionParts(dateText, judgeTableBlock, ...submissionAndTotalBlocks))
@@ -33,8 +30,8 @@ module.exports = async (buttonInteraction, right = true) => {
 			iconURL: auditEmbed.footer.iconURL
 		});
 
-	const calibratedActionRow = calibrateActionRow(buttonInteraction.message.components[0], newPageIndex, maxPages);
-	buttonInteraction.update({embeds: [editedEmbedBuilder], components: [calibratedActionRow]});
+	const calibratedActionRow = calibrateActionRow(auditActionRow, newPageIndex, maxPages);
+	return {embeds: [editedEmbedBuilder], components: [calibratedActionRow]};
 }
 
 function isolateDateText(auditDescription) {

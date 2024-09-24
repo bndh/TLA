@@ -1,10 +1,17 @@
 const { PermissionFlagsBits } = require("discord.js");
-const turnPage = require("./helperModules/turnPage")
+const getTurnedPageData = require("./helperModules/getTurnedPageData");
 
 module.exports = {
 	customId: "previous",
 	permissionBits: PermissionFlagsBits.Administrator,
-	execute(interaction) { // TODO change awaits to be here, isolate turnpage function
-		return turnPage(interaction, false);
+	async execute(interaction) {
+		await interaction.deferUpdate();
+		const pageData = await getTurnedPageData(
+			interaction.client, 
+			interaction.message.embeds[0], 
+			interaction.message.components[0],
+			false
+		);
+		interaction.editReply(pageData);
 	}
 }
