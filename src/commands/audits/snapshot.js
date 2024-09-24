@@ -25,19 +25,17 @@ module.exports = {
 		if(!overwrite) {
 			const previousSnapshotExists = await Info.exists({id: "snapshotCreationTime"});
 			if(previousSnapshotExists) {
-				interaction.editReply({embeds: [new EmbedBuilder()
-					.setDescription("A snapshot **already exists**! Did **not record** data in accordance with the _**Overwrite**_ property.")
-					.setAuthor({name: "TLA Admin Team", iconURL: process.env.EXTREME_DEMON_URL, url: "https://www.youtube.com/@bndh4409"})
-					.setColor(process.env.FAIL_COLOR)]});
+				interaction.editReply({embeds: [
+					EmbedBuilder.generateFailEmbed("A snapshot **already exists**! Did **not record** data in accordance with the _**Overwrite**_ property.")
+				]});
 				return;
 			}
 		}
 
 		await snapshot(interaction.client);
-		interaction.editReply({embeds: [new EmbedBuilder()
-			.setDescription("Took a **snapshot** of the **current system state**.")
-			.setAuthor({name: "TLA Admin Team", iconURL: process.env.NORMAL_URL, url: "https://www.youtube.com/@bndh4409"})
-			.setColor(process.env.SUCCESS_COLOR)]});
+		interaction.editReply({embeds: [
+			EmbedBuilder.generateSuccessEmbed("Took a **snapshot** of the **current system state**.")
+		]});
 	},
 	snapshot // Used externally
 };

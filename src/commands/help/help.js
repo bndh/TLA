@@ -24,12 +24,11 @@ module.exports = {
 		try {
 			menuResponse = await replyResponse.awaitMessageComponent({time: 5_000}); // No need for filter users as the response is ephemeral
 		} catch(error) {
-			await replyPromise;
 			interaction.editReply({
-				embeds: [generateErrorEmbed(
-					"You took **too long**...\nYou may try again by re-using the **/help** command.",
-					{text: "Time Limit: 0s", iconURL: "https://em-content.zobj.net/source/twitter/408/timer-clock_23f2-fe0f.png"}
-				)],
+				embeds: [
+					EmbedBuilder.generateErrorEmbed("You took **too long**...\nYou may try again by re-using the **/help** command.")
+						.setFooter({text: "Time Limit: 0s", iconURL: "https://em-content.zobj.net/source/twitter/408/timer-clock_23f2-fe0f.png"})
+				],
 				components: [new ActionRowBuilder().setComponents(helpMenu.setDisabled(true))]
 			});
 			return;
@@ -46,7 +45,7 @@ module.exports = {
 			}
 		} // No category found
 		menuResponse.editReply({
-			embeds: [generateErrorEmbed("**Bad request!** That option **does not exist**...\nYou may try again by re-using the **/help** command.")],
+			embeds: [EmbedBuilder.generateErrorEmbed("**Bad request!** That option **does not exist**...\nYou may try again by re-using the **/help** command.")],
 			components: [new ActionRowBuilder().setComponents(helpMenu.setDisabled(true))]
 		})
 	} 
@@ -60,12 +59,9 @@ function generateHelpEmbed(helpCategories) {
 		value: category.description, 
 		inline: true
 	}));
-	return new EmbedBuilder()
-		.setDescription(description)
-		.setFields(...fields) // helpCategories have values set for name, value, and inline, which correspond with the properties for a field
-		.setAuthor({name: "TLA Bot Help", iconURL: process.env.HARD_URL})
+	return EmbedBuilder.generateNeutralEmbed(description, {name: "TLA Bot Help"})
+		.setFields(...fields)
 		.setFooter({text: "Time Limit: 90s", iconURL: "https://em-content.zobj.net/source/twitter/408/timer-clock_23f2-fe0f.png"})
-		.setColor(process.env.NEUTRAL_COLOR)
 }
 
 function generateHelpMenu(helpCategories) {
@@ -73,15 +69,6 @@ function generateHelpMenu(helpCategories) {
 		.setCustomId("help-menu")
 		.setPlaceholder("Select the field for which you need help...")
 		.setOptions(...helpCategories);
-}
-
-function generateErrorEmbed(description, footer = undefined) {
-	const embedBuilder = new EmbedBuilder()
-		.setDescription(description)
-		.setAuthor({name: "TLA Bot Help", iconURL: process.env.EXTREME_DEMON_URL})
-		.setColor(process.env.FAIL_COLOR);
-	if(footer) embedBuilder.setFooter(footer);
-	return embedBuilder;
 }
 
 function generateCategoryEmbed(helpCategory) {
@@ -105,7 +92,7 @@ function generateCategoryEmbed(helpCategory) {
 		}
 	}
 
-	return new EmbedBuilder()
+	return EmbedBuilder() // TODO custom colours!!
 		.setDescription(description)
 		.setAuthor({name: `TLA Bot ${helpCategory.label} Section`, iconURL: helpCategory.emojiURL})
 		.setColor(process.env.NEUTRAL_COLOR);

@@ -14,8 +14,8 @@ const updateOrCreate = require("../../mongo/utility/updateOrCreate");
 const { snapshot } = require("./snapshot");
 
 const DIVIDER = Coloriser.color("│", "GREY");
-// TODO '' for dupe interim 
-// TODO check code considering falsy 0
+// TODO Ditto '' for same interim values
+// TODO make update or create a prototype method
 module.exports = {
 	data: new SlashCommandBuilder()
 		.setName("audit")
@@ -28,7 +28,7 @@ module.exports = {
 		.setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 	async execute(interaction) {
 		await interaction.deferReply(); // Must await defer for proper error catching externally
-
+	
 		const overwrite = interaction.options.getBoolean("overwrite", false) ?? false;
 		let snapshotPromise;
 		if(overwrite) {
@@ -39,13 +39,82 @@ module.exports = {
 		}
 
 		const replyPromise = generateReply(interaction.client);
-		
-		const completionData = await Promise.all([replyPromise, snapshotPromise]);
-		interaction.editReply(completionData[0]);
+		const disablePromise = disableOldAudit(interaction.client);
+
+		const completionData = await Promise.all([replyPromise, snapshotPromise, disablePromise]);
+		const response = await interaction.editReply(completionData[0]);
+
+		await Promise.all([ // Await for error handling
+			updateOrCreate(
+				Info,
+				{id: "lastAuditChannelId"},
+				{data: response.channelId},
+				{id: "lastAuditChannelId", data: response.channelId}
+			),
+			updateOrCreate(
+				Info, 
+				{id: "lastAuditMessageId"},
+				{data: response.id},
+				{id: "lastAuditMessageId", data: response.id}
+			)
+		]);
 	},
 	generateJudgeTableBlock, // Used externally in page turning mechanisms
 	combineAuditDescriptionParts
 };
+
+async function disableOldAudit(client) {
+	const channelData = await Info.findOne({id: "lastAuditChannelId"}).select({data: 1}).exec();
+	const messageDataPromise = Info.findOne({id: "lastAuditMessageId"}).select({data: 1}).exec();
+
+	let message;
+	try {
+		const channel = await client.channels.fetch(channelData.data);
+
+		const messageData = await messageDataPromise;
+		message = await channel.messages.fetch(messageData.data);
+	} catch(error) {
+		return;
+	}
+	
+	const disabledEmbed = generateDisabledEmbed(message.embeds[0]);
+	const disabledActionRow = generateDisabledActionRow(message.components[0]);
+
+	if(!disabledEmbed && !disabledActionRow) return;
+	const responseData = {};
+	if(disabledEmbed) responseData.embeds = [disabledEmbed];
+	if(disabledActionRow) responseData.components = [disabledActionRow];
+	await message.edit(responseData);
+}
+
+function generateDisabledEmbed(embed) {
+	if(!embed) return;
+
+	const newLineIndex = embed.description.indexOf("\n");
+	const dateText = embed.description.slice(0, newLineIndex); // Date always on first line
+	const otherText = embed.description.slice(newLineIndex);
+
+	const embedBuilder = EmbedBuilder.from(embed);
+	embedBuilder.setDescription(
+		dateText + "\n\n" + 
+		"_This Audit Report is now **outdated**.\nPlease search for an **updated version** elsewhere._" +
+		otherText // \n already attached
+	);
+	embedBuilder.setColor(process.env.FAIL_COLOR);
+	return embedBuilder;
+}
+
+function generateDisabledActionRow(actionRow) {
+	if(!actionRow) return;
+
+	const disabledActionRow = new ActionRowBuilder();
+	for(const button of actionRow.components) {
+		const buttonBuilder = ButtonBuilder.from(button);
+		buttonBuilder.setDisabled(true);
+		disabledActionRow.addComponents(buttonBuilder);
+	}
+	return disabledActionRow;
+}
 
 async function generateReply(client) {
 	const allAuditees = await prepareAuditees();
@@ -69,12 +138,9 @@ async function prepareAuditees() {
 }
 
 async function generateAuditEmbed(client, sortedAuditees, totalAuditees) {
-	return new EmbedBuilder() // Everything except 
-		.setAuthor({name: "TLA Admin Team", iconURL: process.env.NORMAL_URL, url: "https://www.youtube.com/@bndh4409"})
+	return EmbedBuilder.generateSuccessEmbed(await generateDescriptionText(client, sortedAuditees))
 		.setTitle("__JUDGE AUDIT REPORT__")
-		.setFooter({text: generateFooterText(totalAuditees), iconURL: "https://images.emojiterra.com/twitter/v14.0/512px/1f4c4.png"})
-		.setColor(process.env.SUCCESS_COLOR)
-		.setDescription(await generateDescriptionText(client, sortedAuditees));
+		.setFooter({text: generateFooterText(totalAuditees), iconURL: "https://images.emojiterra.com/twitter/v14.0/512px/1f4c4.png"});
 }
 // TODO disable old report buttons
 function generateActionRow(auditeeCount) {

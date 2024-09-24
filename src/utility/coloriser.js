@@ -13,7 +13,7 @@ class Coloriser { // TODO americanise all colours
 
 	static color(text, colorCode) {
 		if(typeof colorCode === "number") colorCode = this.getKeyFromIndex(this.Colors, colorCode);
-		if(!colorCode) return text;
+		if(colorCode === undefined) return text;
 
 		let colorCharacter = this.Colors.get(colorCode.toUpperCase());
 		return colorCharacter + text;

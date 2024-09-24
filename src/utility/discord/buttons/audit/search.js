@@ -10,7 +10,7 @@ module.exports = {
 	
 		const auditee = await Auditee.findOne({userId: interaction.user.id}).exec();
 		if(!auditee) {
-			interaction.followUp({embeds: [generateNotFoundEmbed()]});
+			interaction.followUp({embeds: [EmbedBuilder.generateFailEmbed("Your information was **not recorded** in an **Audit Report**!\nIf you believe this is **incorrect**, please contact _**@gamingpharoah**_")]});
 			return;
 		}   
 	
@@ -33,11 +33,4 @@ function generatePerformanceEmbed(auditeeBlock, user) {
 		.setDescription(`**${auditeeBlock}**`)
 		.setAuthor({name: `${user.displayName}'s Performance Report`, iconURL: `https://cdn.discordapp.com/avatars/${user.id}/"${user.avatar}.jpeg`})
 		.setColor(process.env.SUCCESS_COLOR);
-}
-
-function generateNotFoundEmbed() {
-	return new EmbedBuilder()
-		.setDescription("Your information was **not recorded** in an **Audit Report**!\nIf you believe this is **incorrect**, please contact _**@gamingpharoah**_")
-		.setAuthor({name: "TLA Admin Team", iconURL: process.env.EXTREME_DEMON_URL})
-		.setColor(process.env.FAIL_COLOR);
 }

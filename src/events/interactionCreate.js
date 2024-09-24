@@ -30,18 +30,10 @@ async function handleChatInputCommand(interaction) {
 	} catch(error) {
 		console.error(error);
 		if(interaction.replied || interaction.deferred) {
-			interaction.editReply({
-				embeds: [new EmbedBuilder()
-					.setDescription("An **error occurred**; please try again.\nIf the **problem persists**, please contact _**@gamingpharoah**_.")
-					.setAuthor({name: "TLA Admin Team", iconURL: process.env.EXTREME_DEMON_URL, url: "https://www.youtube.com/@bndh4409"})
-					.setColor(process.env.FAIL_COLOR)]
-			});
+			interaction.editReply({embeds: [EmbedBuilder.generateFailEmbed()]});
 		} else {
 			interaction.reply({
-				embeds: [new EmbedBuilder()
-					.setDescription("An **error occurred**; please try again.\nIf the **problem persists**, please contact _**@gamingpharoah**_.")
-					.setAuthor({name: "TLA Admin Team", iconURL: process.env.EXTREME_DEMON_URL, url: "https://www.youtube.com/@bndh4409"})
-					.setColor(process.env.FAIL_COLOR)], 
+				embeds: [EmbedBuilder.generateFailEmbed()], 
 				ephemeral: true
 			});
 		}
@@ -52,10 +44,7 @@ async function handleButtonInteraction(interaction) {
 	const button = buttons.get(interaction.customId);
 	if(!button) interaction.reply({
 		ephemeral: true,
-		embeds: [new EmbedBuilder()
-				.setAuthor({name: "Something went wrong!", iconURL: process.env.EXTREME_DEMON_URL})
-				.setDescription("That button is **missing implementation**!\nIf you believe this is **incorrect**, please contact _**@gamingpharoah**_.")
-				.setColor(process.env.FAIL_COLOR)]
+		embeds: [EmbedBuilder.generateFailEmbed()]
 	});
 
 	if(interaction.memberPermissions.has(button.permissionBits)) {
@@ -63,39 +52,25 @@ async function handleButtonInteraction(interaction) {
 			await button.execute(interaction);
 		} catch(error) {
 			console.error(error);
+			
+			const errorEmbed = EmbedBuilder.generateFailEmbed();
 			if(interaction.replied || interaction.deferred) {
 				interaction.editReply({
-					embeds: [new EmbedBuilder()
-						.setDescription("An **error occurred**; please try again.\nIf the **problem persists**, please contact _**@gamingpharoah**_.")
-						.setAuthor({name: "TLA Admin Team", iconURL: process.env.EXTREME_DEMON_URL, url: "https://www.youtube.com/@bndh4409"})
-						.setColor(process.env.FAIL_COLOR)]
+					embeds: [errorEmbed]
 				});
 			} else {
 				interaction.reply({
-					embeds: [new EmbedBuilder()
-						.setDescription("An **error occurred**; please try again.\nIf the **problem persists**, please contact _**@gamingpharoah**_.")
-						.setAuthor({name: "TLA Admin Team", iconURL: process.env.EXTREME_DEMON_URL, url: "https://www.youtube.com/@bndh4409"})
-						.setColor(process.env.FAIL_COLOR)], 
+					embeds: [errorEmbed], 
 					ephemeral: true
 				});
 			}
 		}
 	} else {
+		const permissionErrorEmbed = [EmbedBuilder.generateFailEmbed("**Insufficient permissions**!\nIf you believe this is **incorrect**, please contact _**@gamingpharoah**_.")];
 		if(interaction.replied || interaction.deferred) {
-			interaction.editReply({
-				embeds: [new EmbedBuilder()
-					.setDescription("**Insufficient permissions**!\nIf you believe this is **incorrect**, please contact _**@gamingpharoah**_.")
-					.setAuthor({name: "TLA Admin Team", iconURL: process.env.EXTREME_DEMON_URL, url: "https://www.youtube.com/@bndh4409"})
-					.setColor(process.env.FAIL_COLOR)]
-			});
+			interaction.editReply({embeds: [permissionErrorEmbed]});
 		} else {
-			interaction.reply({
-				embeds: [new EmbedBuilder()
-					.setDescription("**Insufficient permissions**!\nIf you believe this is **incorrect**, please contact _**@gamingpharoah**_.")
-					.setAuthor({name: "TLA Admin Team", iconURL: process.env.EXTREME_DEMON_URL, url: "https://www.youtube.com/@bndh4409"})
-					.setColor(process.env.FAIL_COLOR)], 
-				ephemeral: true
-			});
+			interaction.reply({embeds: [permissionErrorEmbed], ephemeral: true});
 		}
 	}
 } // TODO test composite permissions

@@ -8,6 +8,7 @@ const Submission = require("./mongo/Submission");
 const handleVetoJudgement = require("./utility/discord/submissionsVeto/handleVetoJudgement");
 const getAllExports = require("./utility/files/getAllExports");
 const { threadId } = require("worker_threads");
+const Coloriser = require("./utility/Coloriser");
 
 client = new Client({
 	intents: [
@@ -28,12 +29,46 @@ client = new Client({
 	await mongoose.connect(process.env.MONGODB_URI);
 	console.log("Connected to Mongoose!");
 
+	pushEmbedMethods();
 	loadCommands();
 	registerListeners();
 	await client.login(process.env.TOKEN);
 	await checkChannels();
 	startPendingCountdowns();
 })();
+
+function pushEmbedMethods() {
+	EmbedBuilder.generateResponseEmbed = (author, description, color) => {
+		return new EmbedBuilder()
+			.setAuthor(author)
+			.setDescription(description)
+			.setColor(color);
+	}
+
+	EmbedBuilder.generateSuccessEmbed = (
+		description = "Interaction **successful**!", 
+		author = {name: "TLA Admin Team", url: "https://www.youtube.com/@bndh4409", iconURL: process.env.NORMAL_URL}
+	) => {
+		if(!author.iconURL) author.iconURL = process.env.NORMAL_URL;
+		return EmbedBuilder.generateResponseEmbed(author, description, process.env.SUCCESS_COLOR);
+	};
+
+	EmbedBuilder.generateNeutralEmbed = (
+		description = "Interaction **successful**!", 
+		author = {name: "TLA Admin Team", url: "https://www.youtube.com/@bndh4409", iconURL: process.env.HARD_URL}
+	) => {
+		if(!author.iconURL) author.iconURL = process.env.HARD_URL;
+		return EmbedBuilder.generateResponseEmbed(author, description, process.env.NEUTRAL_COLOR);
+	};
+
+	EmbedBuilder.generateFailEmbed = (
+		description = "Something went **wrong**! Please **try again**.\nIf the issue **persists**, please contact _**@gamingpharoah**_.",
+		author = {name: "TLA Admin Team", url: "https://www.youtube.com/@bndh4409", iconURL: process.env.EXTREME_DEMON_URL}
+	) => {
+		if(!author.iconURL) author.iconURL = process.env.EXTREME_DEMON_URL;
+		return EmbedBuilder.generateResponseEmbed(author, description, process.env.FAIL_COLOR);
+	};
+}
 
 function loadCommands() {
 	client.commands = new Collection(); // Attach a commands property to our client which is accessible in other files
