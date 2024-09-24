@@ -42,7 +42,7 @@ module.exports = {
 		)
 		.setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 	async execute(interaction) {
-		const deferPromise = interaction.deferReply({ephemeral: true});
+		await interaction.deferReply({ephemeral: true});
 		
 		const mode = interaction.options.getString("mode", true);
 		const maxIntake = interaction.options.getInteger("max-intake", false) ?? process.env.MAX_INTAKE_SYNC;
@@ -62,7 +62,6 @@ module.exports = {
 			await handleJudgeSync(promisedChannels[1], promisedChannels[2]);
 		}
 
-		await deferPromise;
 		interaction.editReply("Sync complete!");
 	}
 };

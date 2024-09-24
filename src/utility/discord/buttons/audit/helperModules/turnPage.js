@@ -1,6 +1,6 @@
-const Auditee = require("../../../../mongo/Auditee");
+const Auditee = require("../../../../../mongo/Auditee");
 
-const { generateJudgeTableBlock, combineAuditDescriptionParts } = require("../../../../commands/audits/audit");
+const { generateJudgeTableBlock, combineAuditDescriptionParts } = require("../../../../../commands/audits/audit");
 const { EmbedBuilder, ButtonBuilder, ActionRowBuilder } = require("discord.js");
 
 module.exports = async (buttonInteraction, right = true) => {

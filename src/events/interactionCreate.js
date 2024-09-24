@@ -1,6 +1,16 @@
-const {Events, PermissionFlagsBits, EmbedBuilder} = require("discord.js");
-const turnPage = require("../utility/discord/buttons/audit/turnPage");
+const {Collection, Events, PermissionFlagsBits, EmbedBuilder} = require("discord.js");
+const turnPage = require("../utility/discord/buttons/audit/helperModules/turnPage");
 const search = require("../utility/discord/buttons/audit/search");
+const getAllExports = require("../utility/files/getAllExports");
+const path = require("path");
+
+let buttons;
+
+	buttons = new Collection();
+	const buttonData = getAllExports(path.join(__dirname, "..", "utility/discord/buttons"), file => !file.name.toLowerCase().endsWith("modules"));
+	buttonData.forEach(button => buttons.set(button.customId, button));
+
+
 
 module.exports = {
 	name: Events.InteractionCreate,
@@ -17,43 +27,77 @@ async function handleChatInputCommand(interaction) {
 		return;
 	}
 
-	try { // TODO Fix  this /used to have awaits
+	try {
 		await command.execute(interaction);
 	} catch(error) {
 		console.error(error);
 		if(interaction.replied || interaction.deferred) {
-			interaction.followUp({content: "There was an error while executing this command!", ephemeral: true});
+			interaction.editReply({
+				embeds: [new EmbedBuilder()
+					.setDescription("An **error occurred**; please try again.\nIf the **problem persists**, please contact _**@gamingpharoah**_.")
+					.setAuthor({name: "TLA Admin Team", iconURL: process.env.EXTREME_DEMON_URL, url: "https://www.youtube.com/@bndh4409"})
+					.setColor(process.env.FAIL_COLOR)]
+			});
 		} else {
-			interaction.reply({content: 'There was an error while executing this command!', ephemeral: true});
+			interaction.reply({
+				embeds: [new EmbedBuilder()
+					.setDescription("An **error occurred**; please try again.\nIf the **problem persists**, please contact _**@gamingpharoah**_.")
+					.setAuthor({name: "TLA Admin Team", iconURL: process.env.EXTREME_DEMON_URL, url: "https://www.youtube.com/@bndh4409"})
+					.setColor(process.env.FAIL_COLOR)], 
+				ephemeral: true
+			});
 		}
 	}
 }
 
 async function handleButtonInteraction(interaction) {
-	if(interaction.customId === "search") {
-		search(interaction);
-		return;
-	}
-	
-	if(interaction.memberPermissions.has(PermissionFlagsBits.Administrator)) {
-		if(interaction.customId === "next") {
-			turnPage(interaction, true);
-			return;
-		}
-		else if(interaction.customId === "previous") {
-			turnPage(interaction, false);
-			return;
+	const button = buttons.get(interaction.customId);
+	if(!button) interaction.reply({
+		ephemeral: true,
+		embeds: [new EmbedBuilder()
+				.setAuthor({name: "Something went wrong!", iconURL: process.env.EXTREME_DEMON_URL})
+				.setDescription("That button is **missing implementation**!\nIf you believe this is **incorrect**, please contact _**@gamingpharoah**_.")
+				.setColor(process.env.FAIL_COLOR)]
+	});
+
+	if(interaction.memberPermissions.has(button.permissionBits)) {
+		try {
+			await button.execute(interaction);
+		} catch(error) {
+			console.error(error);
+			if(interaction.replied || interaction.deferred) {
+				interaction.editReply({
+					embeds: [new EmbedBuilder()
+						.setDescription("An **error occurred**; please try again.\nIf the **problem persists**, please contact _**@gamingpharoah**_.")
+						.setAuthor({name: "TLA Admin Team", iconURL: process.env.EXTREME_DEMON_URL, url: "https://www.youtube.com/@bndh4409"})
+						.setColor(process.env.FAIL_COLOR)]
+				});
+			} else {
+				interaction.reply({
+					embeds: [new EmbedBuilder()
+						.setDescription("An **error occurred**; please try again.\nIf the **problem persists**, please contact _**@gamingpharoah**_.")
+						.setAuthor({name: "TLA Admin Team", iconURL: process.env.EXTREME_DEMON_URL, url: "https://www.youtube.com/@bndh4409"})
+						.setColor(process.env.FAIL_COLOR)], 
+					ephemeral: true
+				});
+			}
 		}
 	} else {
-		await interaction.deferUpdate();
-		interaction.reply({
-			ephemeral: true,
-			embeds: [
-				new EmbedBuilder()
-					.setAuthor({name: "Something went wrong!", iconURL: process.env.EXTREME_DEMON_URL})
-					.setDescription("That function is **admin-only**!\nIf you believe this is **incorrect**, please contact _**@gamingpharoah**_")
-					.setColor(process.env.FAIL_COLOR)
-			]
-		});
+		if(interaction.replied || interaction.deferred) {
+			interaction.editReply({
+				embeds: [new EmbedBuilder()
+					.setDescription("**Insufficient permissions**!\nIf you believe this is **incorrect**, please contact _**@gamingpharoah**_.")
+					.setAuthor({name: "TLA Admin Team", iconURL: process.env.EXTREME_DEMON_URL, url: "https://www.youtube.com/@bndh4409"})
+					.setColor(process.env.FAIL_COLOR)]
+			});
+		} else {
+			interaction.reply({
+				embeds: [new EmbedBuilder()
+					.setDescription("**Insufficient permissions**!\nIf you believe this is **incorrect**, please contact _**@gamingpharoah**_.")
+					.setAuthor({name: "TLA Admin Team", iconURL: process.env.EXTREME_DEMON_URL, url: "https://www.youtube.com/@bndh4409"})
+					.setColor(process.env.FAIL_COLOR)], 
+				ephemeral: true
+			});
+		}
 	}
-}
+} // TODO test composite permissions

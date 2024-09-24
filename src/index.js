@@ -1,5 +1,5 @@
 require("dotenv").config();
-const {Client, GatewayIntentBits, Collection, Partials, EmbedBuilder, time, TimestampStyles, ButtonBuilder, ButtonStyle, ActionRowBuilder} = require("discord.js");
+const {Client, GatewayIntentBits, Collection, Partials, EmbedBuilder, time, TimestampStyles, ButtonBuilder, ButtonStyle, ActionRowBuilder, PermissionFlagsBits} = require("discord.js");
 const path = require("path");
 const mongoose = require("mongoose");
 

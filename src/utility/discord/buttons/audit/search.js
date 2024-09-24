@@ -1,31 +1,31 @@
 require("dotenv").config();
 const Auditee = require("../../../../mongo/Auditee");
 const { generateJudgeTableBlock } = require("../../../../commands/audits/audit");
-const { EmbedBuilder } = require("discord.js");
+const { EmbedBuilder, PermissionFlagsBits } = require("discord.js");
 
-module.exports = async (interaction) => {
-	const deferPromise = interaction.deferReply({ephemeral: true});
-
-
-
-	const auditee = await Auditee.findOne({userId: interaction.user.id}).exec();
-	if(!auditee) {
-		await deferPromise;
-		interaction.editReply({embeds: [generateNotFoundEmbed()]});
-		return;
-	}   
-
-	const auditeeBlockPromise = new Promise(async resolve => {
-		const index = await Auditee.countDocuments({judgedInInterim: {$lt: auditee.judgedInInterim}}).exec();
-		resolve(await generateJudgeTableBlock(interaction.client, [auditee], index, 1));
-	});
-	const userPromise = interaction.client.users.fetch(interaction.user.id);
-	const performanceEmbedArguments = await Promise.all([auditeeBlockPromise, userPromise]);
-
-	await deferPromise;
-	interaction.editReply({
-		embeds: [generatePerformanceEmbed(...performanceEmbedArguments)]
-	});
+module.exports = {
+	customId: "search",
+	async execute(interaction) {
+		await interaction.deferUpdate();
+	
+		const auditee = await Auditee.findOne({userId: interaction.user.id}).exec();
+		if(!auditee) {
+			interaction.followUp({embeds: [generateNotFoundEmbed()]});
+			return;
+		}   
+	
+		const auditeeBlockPromise = new Promise(async resolve => {
+			const index = await Auditee.countDocuments({judgedInInterim: {$lt: auditee.judgedInInterim}}).exec();
+			resolve(await generateJudgeTableBlock(interaction.client, [auditee], index, 1));
+		});
+		const userPromise = interaction.client.users.fetch(interaction.user.id);
+		const performanceEmbedArguments = await Promise.all([auditeeBlockPromise, userPromise]);
+	
+		interaction.followUp({
+			embeds: [generatePerformanceEmbed(...performanceEmbedArguments)],
+			ephemeral: true
+		});
+	}
 };
 
 function generatePerformanceEmbed(auditeeBlock, user) {

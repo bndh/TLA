@@ -9,7 +9,7 @@ module.exports = {
 		.setName("help")
 		.setDescription("Gives helpful information about all aspects of TLA."),
 	async execute(interaction) {
-		const replyPromise = interaction.deferReply({ephemeral: true});
+		await interaction.deferReply({ephemeral: true});
 
 		const helpCategories = getAllExports(path.join(__dirname, "helpModules"), file => !file.isDirectory());
 		

@@ -14,7 +14,7 @@ module.exports = {
 			.setRequired(false)
 		),
 	async execute(interaction) {
-		const deferPromise = interaction.deferReply({ephemeral: true});
+		await interaction.deferReply({ephemeral: true});
 
 		const preview = interaction.options.getBoolean("preview", false) ?? false;
 
@@ -24,7 +24,6 @@ module.exports = {
 		 		 .exec()
 		);
 		if(!judgeEntry) {
-			await deferPromise;
 			interaction.editReply(`You are not yet \`registered\`. Contact an \`admin\` if you believe this is incorrect.`);
 			return;
 		}
@@ -53,7 +52,6 @@ module.exports = {
 		}
 		responseText += `at: ${thread.url}`; // All threads are titled "New Submission!" (shown in the shortcut of thread.url), so no need for any closing punctuation here
 
-		await deferPromise;
 		interaction.editReply(responseText); 
 	}
 };

@@ -32,7 +32,7 @@ module.exports = {
 		)
 		.setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 	async execute(interaction) {
-		const deferPromise = interaction.deferReply({ephemeral: true});
+		await interaction.deferReply({ephemeral: true});
 
 		const registree = interaction.options.getUser("registree", true);
 		const judgeType = interaction.options.getString("judge-type", true);

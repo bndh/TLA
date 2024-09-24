@@ -11,11 +11,11 @@ const capitalise = require("../../utility/capitalise");
 const Coloriser = require("../../utility/Coloriser");
 const TextFormatter = require("../../utility/TextFormatter");
 const updateOrCreate = require("../../mongo/utility/updateOrCreate");
+const { snapshot } = require("./snapshot");
 
 const DIVIDER = Coloriser.color("│", "GREY");
-
+// TODO '' for dupe interim 
 // TODO check code considering falsy 0
-// TODO consider changing interim resolution to 5 places
 module.exports = {
 	data: new SlashCommandBuilder()
 		.setName("audit")
@@ -27,34 +27,50 @@ module.exports = {
 		)
 		.setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 	async execute(interaction) {
-		const deferPromise = interaction.deferReply();
-	// TODO delete old auditees
-		const allAuditees = await prepareAuditees();
-		const visibleAuditees = allAuditees.slice(0, parseInt(process.env.AUDITEES_PER_PAGE));
-		const sortedAuditees = visibleAuditees.sort((auditeeA, auditeeB) => auditeeB.judgedInInterim - auditeeA.judgedInInterim);
+		await interaction.deferReply(); // Must await defer for proper error catching externally
 
-		const auditEmbed = await generateAuditEmbed(interaction.client, sortedAuditees, allAuditees.length);
-		const actionRow = generateActionRow(allAuditees.length);
+		const overwrite = interaction.options.getBoolean("overwrite", false) ?? false;
+		let snapshotPromise;
+		if(overwrite) {
+			snapshotPromise = snapshot(interaction.client);
+		} else {
+			const previousSnapshotExists = await Info.exists({id: "snapshotCreationTime"});
+			if(!previousSnapshotExists) snapshotPromise = snapshot(interaction.client);
+		}
 
-		await deferPromise;
-		interaction.editReply({embeds: [auditEmbed], components: [actionRow]});
+		const replyPromise = generateReply(interaction.client);
+		
+		const completionData = await Promise.all([replyPromise, snapshotPromise]);
+		interaction.editReply(completionData[0]);
 	},
 	generateJudgeTableBlock, // Used externally in page turning mechanisms
 	combineAuditDescriptionParts
 };
 
+async function generateReply(client) {
+	const allAuditees = await prepareAuditees();
+	const visibleAuditees = allAuditees.slice(0, parseInt(process.env.AUDITEES_PER_PAGE));
+	const sortedAuditees = visibleAuditees.sort((auditeeA, auditeeB) => auditeeB.judgedInInterim - auditeeA.judgedInInterim);
+
+	const auditEmbed = await generateAuditEmbed(client, sortedAuditees, allAuditees.length);
+	const actionRow = generateActionRow(allAuditees.length);
+	
+	return {embeds: [auditEmbed], components: [actionRow]};
+}
+
 async function prepareAuditees() {
-	const judgeDocs = await Judge.enqueue(() => Judge.find({}));
-// TODO rewrite
-	const auditees = await Promise.all(judgeDocs.map(judgeDoc => new Promise(async (resolve) => {
-		return resolve(await createOrUpdateAuditee(judgeDoc));
-	})));
+	const judgeDocs = await Judge.enqueue(() => Judge.find({}).exec());
+	const deletionPromise = Auditee.deleteMany({userId: {$nin: judgeDocs.map(doc => doc.userId)}}).exec();
+
+	const auditees = await Promise.all(judgeDocs.map(judgeDoc => createOrUpdateAuditee(judgeDoc)));
+
+	await deletionPromise;
 	return auditees;
 }
 
 async function generateAuditEmbed(client, sortedAuditees, totalAuditees) {
 	return new EmbedBuilder() // Everything except 
-		.setAuthor({name: "TLA Admin Team", iconURL: process.env.INSANE_DEMON_URL, url: "https://www.youtube.com/@bndh4409"})
+		.setAuthor({name: "TLA Admin Team", iconURL: process.env.NORMAL_URL, url: "https://www.youtube.com/@bndh4409"})
 		.setTitle("__JUDGE AUDIT REPORT__")
 		.setFooter({text: generateFooterText(totalAuditees), iconURL: "https://images.emojiterra.com/twitter/v14.0/512px/1f4c4.png"})
 		.setColor(process.env.SUCCESS_COLOR)
@@ -83,16 +99,11 @@ function generateActionRow(auditeeCount) {
 		.setComponents(previousPageButton, searchButton, nextPageButton);
 }
 
-function snapshotJudgeData() {
-	
-}
-
 function generateFooterText(totalAuditees, pageNumber = 1) {
 	const maxPages = Math.ceil(totalAuditees / parseInt(process.env.AUDITEES_PER_PAGE));
 	return `Page ${pageNumber} of ${maxPages}`;
 }
 
-// TODO check out if we can fix the blue basckgrounding
 async function generateDescriptionText(client, sortedAuditees) {
 	const descriptionParts = await Promise.all([
 		generateDateText(),
@@ -214,7 +225,7 @@ function calculateTotalSubmissionsJudged(counselledSubmissionIds, totalSubmissio
 }
 
 function calculateJudgedInInterim(totalSubmissionsJudged, snappedJudgedInterim, snappedJudgedTotal) {
-	if(snappedJudgedInterim) return totalSubmissionsJudged - snappedJudgedTotal; // Conventional flow; not a new judge
+	if(snappedJudgedInterim !== undefined) return totalSubmissionsJudged - snappedJudgedTotal; // Conventional flow; not a new judge
 	else return totalSubmissionsJudged; // A new judge (or one with 0 snappedJudgedTotal) is one implied to have been created since the last snapshot, so we just take judgedInInterim as their currentJudgedTotal
 }
 
@@ -227,7 +238,7 @@ function calculateInterimChange(judgedInInterim, snappedJudgedInterim) {
 			else return 9999; // ∞ symbol looks too sad so we just say 9999, the max
 		}
 	} else {
-		return "???"; // Unique placeholder value: ???%
+		return 9999;
 	}
 }
 
