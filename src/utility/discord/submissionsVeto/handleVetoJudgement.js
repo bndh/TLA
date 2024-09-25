@@ -2,8 +2,7 @@ require("dotenv").config();
 
 const {time, TimestampStyles} = require("discord.js");
 
-const Submission = require("../../../mongo/Submission");
-const Judge = require("../../../mongo/Judge");
+const { Judge, Submission } = require("../../../mongo/mongoModels").modelData;
 
 const getTagByEmojiCode = require("../threads/getTagByEmojiCode");
 const getVideosFromMessage = require("../messages/getVideosFromMessage");

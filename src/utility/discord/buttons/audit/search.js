@@ -1,7 +1,7 @@
 require("dotenv").config();
-const Auditee = require("../../../../mongo/Auditee");
+const { Auditee } = require("../../../../mongo/mongoModels").modelData;
 const { generateJudgeTableBlock } = require("../../../../commands/audits/audit");
-const { EmbedBuilder, PermissionFlagsBits } = require("discord.js");
+const { EmbedBuilder } = require("discord.js");
 
 module.exports = {
 	customId: "search",

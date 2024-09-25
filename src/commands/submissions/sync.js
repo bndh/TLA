@@ -1,8 +1,7 @@
 require("dotenv").config();
 const { SlashCommandBuilder, PermissionFlagsBits } = require("discord.js");
 
-const Judge = require("../../mongo/Judge");
-const Submission = require("../../mongo/Submission");
+const { Judge, Submission } = require("../../mongo/mongoModels").modelData;
 
 const getAllThreads = require("../../utility/discord/threads/getAllThreads");
 const getReactedUsers = require("../../utility/discord/reactions/getReactedUsers");

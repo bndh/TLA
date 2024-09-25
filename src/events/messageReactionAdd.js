@@ -2,7 +2,7 @@ require("dotenv").config();
 
 const {Events} = require("discord.js");
 
-const Judge = require("../mongo/Judge");
+const { Judge } = require("../mongo/mongoModels").modelData;
 
 const getTagByEmojiCode = require("../utility/discord/threads/getTagByEmojiCode");
 const handleSubmissionReject = require("../utility/discord/submissionsVeto/handleSubmissionReject");

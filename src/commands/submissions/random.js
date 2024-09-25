@@ -1,7 +1,6 @@
 const { SlashCommandBuilder } = require("discord.js");
 
-const Judge = require("../../mongo/Judge");
-const Submission = require("../../mongo/Submission");
+const { Judge, Submission } = require("../../mongo/mongoModels").modelData;
 const getVideosFromMessage = require("../../utility/discord/messages/getVideosFromMessage");
 
 module.exports = {

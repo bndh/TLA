@@ -1,20 +1,21 @@
 const path = require("path");
-const { ActionRowBuilder, EmbedBuilder, StringSelectMenuBuilder, SlashCommandBuilder } = require("discord.js");
+const { ActionRowBuilder, Collection, EmbedBuilder, StringSelectMenuBuilder, SlashCommandBuilder } = require("discord.js");
 const getAllExports = require("../../utility/files/getAllExports");
 const getAllFiles = require("../../utility/files/getAllFiles");
 const TextFormatter = require("../../utility/TextFormatter");
-// TODO generate some of this staticaclly 
+
+const helpCategories = getAllExports(path.join(__dirname, "helpModules"), file => !file.isDirectory());	
+const helpEmbed = generateHelpEmbed(helpCategories);
+
 module.exports = {
 	data: new SlashCommandBuilder()
 		.setName("help")
 		.setDescription("Gives helpful information about all aspects of TLA."),
 	async execute(interaction) {
 		await interaction.deferReply({ephemeral: true});
-
-		const helpCategories = getAllExports(path.join(__dirname, "helpModules"), file => !file.isDirectory());
 		
-		const helpEmbed = generateHelpEmbed(helpCategories);
-		const helpMenu = generateHelpMenu(helpCategories); // Help Menu used later
+		const helpMenu = generateHelpMenu(helpCategories);
+
 		const replyResponse = await interaction.editReply({
 			embeds: [helpEmbed],
 			components: [new ActionRowBuilder().setComponents(helpMenu)]
@@ -22,11 +23,11 @@ module.exports = {
 	
 		let menuResponse;
 		try {
-			menuResponse = await replyResponse.awaitMessageComponent({time: 5_000}); // No need for filter users as the response is ephemeral
+			menuResponse = await replyResponse.awaitMessageComponent({time: parseInt(process.env.HELP_MAX_TIME)}); // No need for filter users as the response is ephemeral
 		} catch(error) {
 			interaction.editReply({
 				embeds: [
-					EmbedBuilder.generateErrorEmbed("You took **too long**...\nYou may try again by re-using the **/help** command.")
+					EmbedBuilder.generateFailEmbed("You took **too long**...\nYou may try again by re-using the **/help** command.")
 						.setFooter({text: "Time Limit: 0s", iconURL: "https://em-content.zobj.net/source/twitter/408/timer-clock_23f2-fe0f.png"})
 				],
 				components: [new ActionRowBuilder().setComponents(helpMenu.setDisabled(true))]
@@ -38,14 +39,14 @@ module.exports = {
 		for(const helpCategory of helpCategories) {
 			if(menuResponse.values.includes(helpCategory.value)) {
 				interaction.editReply({
-					embeds: [generateCategoryEmbed(helpCategory)],
+					embeds: [generateCategoryEmbed(helpCategory)], // Dynamically generated for memory
 					components: [new ActionRowBuilder().setComponents(helpMenu.setDisabled(true))]
 				});
 				return;
 			}
 		} // No category found
 		menuResponse.editReply({
-			embeds: [EmbedBuilder.generateErrorEmbed("**Bad request!** That option **does not exist**...\nYou may try again by re-using the **/help** command.")],
+			embeds: [EmbedBuilder.generateFailEmbed("**Bad request!** That option **does not exist**...\nYou may try again by re-using the **/help** command.")],
 			components: [new ActionRowBuilder().setComponents(helpMenu.setDisabled(true))]
 		})
 	} 
@@ -92,8 +93,8 @@ function generateCategoryEmbed(helpCategory) {
 		}
 	}
 
-	return EmbedBuilder() // TODO custom colours!!
+	return new EmbedBuilder() // TODO custom colours!!
 		.setDescription(description)
 		.setAuthor({name: `TLA Bot ${helpCategory.label} Section`, iconURL: helpCategory.emojiURL})
-		.setColor(process.env.NEUTRAL_COLOR);
+		.setColor(helpCategory.color);
 }

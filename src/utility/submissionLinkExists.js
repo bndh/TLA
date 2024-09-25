@@ -1,5 +1,6 @@
+const { Submission } = require("../mongo/mongoModels").modelData;
+
 const youtubeIdRegex = require("./youtubeIdRegex");
-const Submission = require("../mongo/Submission");
 
 module.exports = async (videoLink) => {
 	if(await Submission.enqueue(() => Submission.exists({videoLink: videoLink}).exec())) return true;

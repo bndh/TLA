@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 
-const auditeeSchema = new mongoose.Schema({ // Must store all data due to overwrite setting on /audit
+module.exports = new mongoose.Schema({ // Must store all data due to overwrite setting on /audit
 	userId: {
 		type      : String,
 		required  : true
@@ -36,6 +36,3 @@ const auditeeSchema = new mongoose.Schema({ // Must store all data due to overwr
 		}
 	}
 });
-
-const model = mongoose.model("Auditee", auditeeSchema);
-module.exports = model;

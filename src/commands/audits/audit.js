@@ -2,15 +2,10 @@ require("dotenv").config();
 
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, time, TimestampStyles, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require("discord.js");
 
-const Info = require("../../mongo/Info");
-const Judge = require("../../mongo/Judge");
-const Submission = require("../../mongo/Submission");
-const Auditee = require("../../mongo/Auditee");
-const getAllThreads = require("../../utility/discord/threads/getAllThreads");
-const capitalise = require("../../utility/capitalise");
+const { Auditee, Info, Judge, Submission } = require("../../mongo/mongoModels").modelData;
+
 const Coloriser = require("../../utility/Coloriser");
 const TextFormatter = require("../../utility/TextFormatter");
-const updateOrCreate = require("../../mongo/utility/updateOrCreate");
 const { snapshot } = require("./snapshot");
 
 const DIVIDER = Coloriser.color("│", "GREY");
@@ -45,18 +40,8 @@ module.exports = {
 		const response = await interaction.editReply(completionData[0]);
 
 		await Promise.all([ // Await for error handling
-			updateOrCreate(
-				Info,
-				{id: "lastAuditChannelId"},
-				{data: response.channelId},
-				{id: "lastAuditChannelId", data: response.channelId}
-			),
-			updateOrCreate(
-				Info, 
-				{id: "lastAuditMessageId"},
-				{data: response.id},
-				{id: "lastAuditMessageId", data: response.id}
-			)
+			Info.updateOrCreate({id: "lastAuditChannelId"}, {data: response.channelId}),
+			Info.updateOrCreate({id: "lastAuditMessageId"}, {data: response.id})
 		]);
 	},
 	generateJudgeTableBlock, // Used externally in page turning mechanisms
@@ -142,7 +127,7 @@ async function generateAuditEmbed(client, sortedAuditees, totalAuditees) {
 		.setTitle("__JUDGE AUDIT REPORT__")
 		.setFooter({text: generateFooterText(totalAuditees), iconURL: "https://images.emojiterra.com/twitter/v14.0/512px/1f4c4.png"});
 }
-// TODO disable old report buttons
+
 function generateActionRow(auditeeCount) {
 	const nextPageButton = new ButtonBuilder()
 		.setCustomId("next")
@@ -183,7 +168,7 @@ async function generateDescriptionText(client, sortedAuditees) {
 
 async function generateDateText() {
 	const snapshotCreationInfo = await Info.findOne({id: "snapshotCreationTime"}).select({data: 1, _id: 0}).exec();
-	const snapshotCreationTime = +snapshotCreationInfo.data;
+	const snapshotCreationTime = parseInt(snapshotCreationInfo.data);
 
 	const formattedSnapshotTime = time(new Date(snapshotCreationTime), TimestampStyles.LongDate);
 	const formattedCurrentTime = time(new Date(Date.now()), TimestampStyles.LongDate);
@@ -278,11 +263,9 @@ async function createOrUpdateAuditee(judgeDoc) {
 	const judgedInInterim = calculateJudgedInInterim(totalSubmissionsJudged, judgeDoc.snappedJudgedInterim, judgeDoc.snappedJudgedTotal);
 	const interimChange = calculateInterimChange(judgedInInterim, judgeDoc.snappedJudgedInterim);
 	// TODO maybe refer to judge doc
-	return updateOrCreate(
-		Auditee,
+	return Auditee.updateOrCreate(
 		{userId: judgeDoc.userId},
-		{judgeType: judgeDoc.judgeType, judgedInInterim: judgedInInterim, interimChange: interimChange, totalSubmissionsJudged: totalSubmissionsJudged},
-		{userId: judgeDoc.userId, judgeType: judgeDoc.judgeType, judgedInInterim: judgedInInterim, interimChange: interimChange, totalSubmissionsJudged: totalSubmissionsJudged}
+		{judgeType: judgeDoc.judgeType, judgedInInterim: judgedInInterim, interimChange: interimChange, totalSubmissionsJudged: totalSubmissionsJudged}
 	);
 }
 
@@ -376,7 +359,7 @@ async function generateFormattedTagCounts() {
 
 	return `${DIVIDER} ${counts[0]} ${DIVIDER} ${counts[1]} ${DIVIDER}`; // Using `` to add spaces around the dividers
 }
-// TODO go through code and replace resizes with appropriate decapitate / abbreviate
+
 const unvetoedStatuses = ["AWAITING VETO", "PENDING APPROVAL"];
 const rejectedStatuses = ["REJECTED", "VETOED"];
 const subSizes = [10, 11, 11, 11];

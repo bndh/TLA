@@ -1,7 +1,6 @@
 require("dotenv").config();
 
-const Submission = require("../../../mongo/Submission");
-const Judge = require("../../../mongo/Judge");
+const { Submission } = require("../../../mongo/mongoModels").modelData;
 
 const createThreadAndReact = require("./createThreadAndReact");
 const getTagByEmojiCode = require("./getTagByEmojiCode");

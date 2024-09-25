@@ -1,6 +1,6 @@
 const {time, TimestampStyles} = require("discord.js");
 
-const Submission = require("../../../mongo/Submission");
+const { Submission } = require("../../../mongo/mongoModels").modelData;
 
 const handleVetoJudgement = require("./handleVetoJudgement");
 

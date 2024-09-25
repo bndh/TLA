@@ -1,4 +1,4 @@
-const Auditee = require("../../../../../mongo/Auditee");
+const { Auditee } = require("../../../../../mongo/mongoModels").modelData;
 
 const { generateJudgeTableBlock, combineAuditDescriptionParts } = require("../../../../../commands/audits/audit");
 const { EmbedBuilder, ButtonBuilder, ActionRowBuilder } = require("discord.js");

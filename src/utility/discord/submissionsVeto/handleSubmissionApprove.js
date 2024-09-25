@@ -1,5 +1,4 @@
-const Submission = require("../../../mongo/Submission");
-const Judge = require("../../../mongo/Judge");
+const { Submission } = require("../../../mongo/mongoModels").modelData;
 
 const getVideosFromMessage = require("../messages/getVideosFromMessage");
 const createReactedThreadsFromVideos = require("../threads/createReactedThreadsFromVideos");

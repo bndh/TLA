@@ -1,14 +1,13 @@
 require("dotenv").config();
-const {Client, GatewayIntentBits, Collection, Partials, EmbedBuilder, time, TimestampStyles, ButtonBuilder, ButtonStyle, ActionRowBuilder, PermissionFlagsBits} = require("discord.js");
+const {Client, Collection, EmbedBuilder, GatewayIntentBits, Partials} = require("discord.js");
 const path = require("path");
-const mongoose = require("mongoose");
 
-const Submission = require("./mongo/Submission");
+const mongoose = require("mongoose");
+const mongoModels = require("./mongo/mongoModels");
+let Submission;
 
 const handleVetoJudgement = require("./utility/discord/submissionsVeto/handleVetoJudgement");
 const getAllExports = require("./utility/files/getAllExports");
-const { threadId } = require("worker_threads");
-const Coloriser = require("./utility/Coloriser");
 
 client = new Client({
 	intents: [
@@ -26,10 +25,12 @@ client = new Client({
 });
 
 (async () => {
+	mongoModels.setup();
+	Submission = mongoModels.modelData.Submission;
 	await mongoose.connect(process.env.MONGODB_URI);
 	console.log("Connected to Mongoose!");
 
-	pushEmbedMethods();
+	pushEmbedFunctions();
 	loadCommands();
 	registerListeners();
 	await client.login(process.env.TOKEN);
@@ -37,7 +38,7 @@ client = new Client({
 	startPendingCountdowns();
 })();
 
-function pushEmbedMethods() {
+function pushEmbedFunctions() {
 	EmbedBuilder.generateResponseEmbed = (author, description, color) => {
 		return new EmbedBuilder()
 			.setAuthor(author)

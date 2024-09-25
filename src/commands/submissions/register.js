@@ -2,9 +2,8 @@ require("dotenv").config();
 
 const {SlashCommandBuilder, PermissionFlagsBits} = require("discord.js");
 
-const Judge = require("../../mongo/Judge");
-const Submission = require("../../mongo/Submission");
-const updateOrCreate = require("../../mongo/utility/updateOrCreate");
+const { Judge } = require("../../mongo/mongoModels").modelData;
+
 const getAllThreads = require("../../utility/discord/threads/getAllThreads");
 const getTagByEmojiCode = require("../../utility/discord/threads/getTagByEmojiCode");
 const hasReacted = require("../../utility/discord/reactions/hasReacted");
@@ -44,8 +43,7 @@ module.exports = {
 
 		const {counselledSubmissionIds, totalSubmissionsClosed} = await tallyRegistreeSubmissions(forums, registree.id);
 
-		const documentPromise = updateOrCreate(
-			Judge,
+		const documentPromise = Judge.updateOrCreate(
 			{userId: registree.id},
 			{$set: {judgeType: judgeType, counselledSubmissionIds: counselledSubmissionIds, totalSubmissionsClosed: totalSubmissionsClosed},
 			 $unset: {snappedJudgedInterim: 1, snappedJudgedTotal: 1}},

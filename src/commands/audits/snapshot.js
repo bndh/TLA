@@ -2,10 +2,8 @@ require("dotenv").config();
 
 const { EmbedBuilder, SlashCommandBuilder, PermissionFlagsBits } = require("discord.js");
 
-const Judge = require("../../mongo/Judge");
-const Info = require("../../mongo/Info");
+const { Info, Judge } = require("../../mongo/mongoModels").modelData;
 const getAllThreads = require("../../utility/discord/threads/getAllThreads");
-const updateOrCreate = require("../../mongo/utility/updateOrCreate");
 
 // TODO further investigate Client
 module.exports = {
@@ -44,13 +42,7 @@ function snapshot(client) {
 	return Promise.all([
 		snapshotJudges(),
 		updateSubmissionCountInfo(client),
-		updateOrCreate(
-			Info,
-			{id: "snapshotCreationTime"},
-			{data: Date.now()},
-			{id: "snapshotCreationTime", data: Date.now()},
-			false
-		)
+		Info.updateOrCreate({id: "snapshotCreationTime"}, {data: Date.now()})
 	]);
 }
 
@@ -86,13 +78,7 @@ async function updateSubmissionCountInfo(client) {
 	for(let i = 0; i < forums.length; i++) {
 		countPromises[i] = new Promise(async (resolve) => {
 			const threads = await getAllThreads(forums[i]);
-			await updateOrCreate(
-				Info,
-				{id: totalSubmissionInfoIds[i]},
-				{data: threads.size},
-				{id: totalSubmissionInfoIds[i], data: threads.size},
-				false
-			);
+			await Info.updateOrCreate({id: totalSubmissionInfoIds[i]}, {data: threads.size});
 			resolve();
 		});
 	}
