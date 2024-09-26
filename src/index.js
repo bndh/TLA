@@ -20,8 +20,8 @@ client = new Client({
 		Partials.Channel, 
 		Partials.Message,
 		Partials.Reaction
-	]
-});
+	] // TODO rebrand to TGA
+}); // TODO NAT overwrite veto
 // TODO let the LNs see whats going on in #submissions-2024 (read only list)
 (async () => { // TODO bug report modal
 	mongoModels.setup();

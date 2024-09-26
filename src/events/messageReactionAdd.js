@@ -21,7 +21,7 @@ module.exports = {
 };
 
 async function handleIntactReaction(messageReaction, user) {
-	if(user.id === process.env.CLIENT_ID) return; // TODO: Seemed caching issue with .me so we use this instead
+	if(user.id === process.env.CLIENT_ID) return;
 	const forum = messageReaction.message.channel.parent;
 	if(!forum) return;
 	if(![process.env.VETO_FORUM_ID, process.env.SUBMISSIONS_FORUM_ID].includes(forum.id)) return;

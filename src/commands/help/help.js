@@ -93,7 +93,7 @@ function generateCategoryEmbed(helpCategory) {
 		}
 	}
 
-	return new EmbedBuilder() // TODO custom colours!!
+	return new EmbedBuilder() 
 		.setDescription(description)
 		.setAuthor({name: `TLA Bot ${helpCategory.label} Section`, iconURL: helpCategory.emojiURL})
 		.setColor(helpCategory.color);

@@ -10,7 +10,7 @@ module.exports = {
 	
 		const auditee = await Auditee.findOne({userId: interaction.user.id}).exec();
 		if(!auditee) {
-			await interaction.followUp({embeds: [EmbedBuilder.generateFailEmbed("Your information was **not recorded** in an **Audit Report**!\nIf you believe this is **incorrect**, please contact _**@gamingpharoah**_")]});
+			await interaction.followUp({embeds: [EmbedBuilder.generateFailEmbed("Your information was **not recorded** in an **Audit Report**!\nIf you believe this is **incorrect**, please contact _**@gamingpharoah**_.")]});
 			return;
 		}   
 	

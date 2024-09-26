@@ -10,7 +10,6 @@ const { snapshot } = require("./snapshot");
 
 const DIVIDER = Coloriser.color("│", "GREY");
 // TODO Ditto '' for same interim values
-// TODO make update or create a prototype method
 module.exports = {
 	data: new SlashCommandBuilder()
 		.setName("audit")
@@ -103,10 +102,10 @@ function generateDisabledActionRow(actionRow) {
 
 async function generateReply(client) {
 	const allAuditees = await prepareAuditees();
-	const visibleAuditees = allAuditees.slice(0, parseInt(process.env.AUDITEES_PER_PAGE));
-	const sortedAuditees = visibleAuditees.sort((auditeeA, auditeeB) => auditeeB.judgedInInterim - auditeeA.judgedInInterim);
+	const sortedAuditees = allAuditees.sort((auditeeA, auditeeB) => auditeeB.judgedInInterim - auditeeA.judgedInInterim);
+	const visibleAuditees = sortedAuditees.slice(0, parseInt(process.env.AUDITEES_PER_PAGE));
 
-	const auditEmbed = await generateAuditEmbed(client, sortedAuditees, allAuditees.length);
+	const auditEmbed = await generateAuditEmbed(client, visibleAuditees, allAuditees.length);
 	const actionRow = generateActionRow(allAuditees.length);
 	
 	return {embeds: [auditEmbed], components: [actionRow]};
@@ -116,10 +115,10 @@ async function prepareAuditees() {
 	const judgeDocs = await Judge.enqueue(() => Judge.find({}).exec());
 	const deletionPromise = Auditee.deleteMany({userId: {$nin: judgeDocs.map(doc => doc.userId)}}).exec();
 
-	const auditees = await Promise.all(judgeDocs.map(judgeDoc => createOrUpdateAuditee(judgeDoc)));
+	const auditeePromises = Promise.all(judgeDocs.map(judgeDoc => createOrUpdateAuditee(judgeDoc)));
 
-	await deletionPromise;
-	return auditees;
+	const finishedPromises = await Promise.all([auditeePromises, deletionPromise]);
+	return finishedPromises[0];
 }
 
 async function generateAuditEmbed(client, sortedAuditees, totalAuditees) {
@@ -192,12 +191,22 @@ async function generateJudgeTableBlock(client, sortedAuditees, startingIndex = 0
 }
 
 async function generateFormattedJudgeRows(client, auditees, startingIndex, maxPerPage) {
-	const auditeeUserData = await Promise.all(auditees.map(async auditee => client.users.fetch(auditee.userId)));
-	const auditeeDisplayNames = auditeeUserData.map(user => user.displayName);
+	// const auditeeUserData = await Promise.all(auditees.map(async auditee => client.users.fetch(auditee.userId)));
+	// const auditeeDisplayNames = auditeeUserData.map(user => user.displayName);
+	
+	const guild = await client.guilds.fetch(process.env.GUILD_ID);
+	const auditeeMemberData = await Promise.all(auditees.map(async auditee => {
+		try {
+			return await guild.members.fetch(auditee.userId);
+		} catch(error) { // Member does not exist
+			return await client.users.fetch(auditee.userId);
+		}
+	}));
+	const auditeeNicknames = auditeeMemberData.map(memberData => memberData.nickname ?? memberData.displayName);
 
 	let rows = "";
 	for(let i = 0; i < auditees.length; i++) {
-		rows += generateTableRow(startingIndex + i, auditees[i], auditeeDisplayNames[i]) + "\n";
+		rows += generateTableRow(startingIndex + i, auditees[i], auditeeNicknames[i]) + "\n";
 	}
 	for(let i = auditees.length; i < parseInt(maxPerPage); i++) {
 		rows += Coloriser.color(process.env.AUDIT_FRAME_NIL, "GREY") + "\n";
@@ -291,13 +300,13 @@ function calculateInterimChange(judgedInInterim, snappedJudgedInterim) {
 	}
 }
 
-function generateTableRow(index, auditee, auditeeDisplayName) {
+function generateTableRow(index, auditee, auditeeName) {
 	let indexText = generateIndexText(index);
-	let displayNameText = generateUserText(auditeeDisplayName, auditee.judgeType)
+	let nameText = generateUserText(auditeeName, auditee.judgeType)
 	let interimText = generateInterimText(auditee.judgedInInterim, auditee.interimChange);
 	let totalText = generateTotalText(auditee.totalSubmissionsJudged);
 
-	return `${DIVIDER} ${indexText} ${DIVIDER} ${displayNameText} ${DIVIDER} ${interimText} ${DIVIDER} ${totalText} ${DIVIDER}`;
+	return `${DIVIDER} ${indexText} ${DIVIDER} ${nameText} ${DIVIDER} ${interimText} ${DIVIDER} ${totalText} ${DIVIDER}`;
 }
 
 function generateIndexText(index) {
@@ -307,13 +316,13 @@ function generateIndexText(index) {
 	return indexText;
 }
 
-function generateUserText(displayName, judgeType) {
-	const sizedDisplayName = TextFormatter.resizeEnd(displayName, 16, " ", "..");
+function generateUserText(name, judgeType) {
+	const sizedName = TextFormatter.resizeEnd(name, 16, " ", "..");
 
 	let auditeeColorCode = 7;
 	if(judgeType === "admin") auditeeColorCode = +process.env.ADMIN_COLOR_CODE;
 	else if(judgeType === "nominator") auditeeColorCode = +process.env.NOMINATOR_COLOR_CODE;
-	return Coloriser.color(sizedDisplayName, auditeeColorCode);
+	return Coloriser.color(sizedName, auditeeColorCode);
 }
 
 function generateInterimText(judgedInInterim, interimChange) {
