@@ -1,13 +1,12 @@
 require("dotenv").config();
-const {Client, Collection, EmbedBuilder, GatewayIntentBits, Partials} = require("discord.js");
+const {Client, Collection, GatewayIntentBits, Partials} = require("discord.js");
 const path = require("path");
 
 const mongoose = require("mongoose");
 const mongoModels = require("./mongo/mongoModels");
-let Submission;
 
-const handleVetoJudgement = require("./utility/discord/submissionsVeto/handleVetoJudgement");
 const getAllExports = require("./utility/files/getAllExports");
+const pushEmbedFunctions = require("./utility/discord/messages/pushEmbedFunctions");
 
 client = new Client({
 	intents: [
@@ -23,10 +22,9 @@ client = new Client({
 		Partials.Reaction
 	]
 });
-
+// TODO let the LNs see whats going on in #submissions-2024 (read only list)
 (async () => {
 	mongoModels.setup();
-	Submission = mongoModels.modelData.Submission;
 	await mongoose.connect(process.env.MONGODB_URI);
 	console.log("Connected to Mongoose!");
 
@@ -37,39 +35,7 @@ client = new Client({
 	await checkChannels();
 	startPendingCountdowns();
 })();
-
-function pushEmbedFunctions() {
-	EmbedBuilder.generateResponseEmbed = (author, description, color) => {
-		return new EmbedBuilder()
-			.setAuthor(author)
-			.setDescription(description)
-			.setColor(color);
-	}
-
-	EmbedBuilder.generateSuccessEmbed = (
-		description = "Interaction **successful**!", 
-		author = {name: "TLA Admin Team", url: "https://www.youtube.com/@bndh4409", iconURL: process.env.NORMAL_URL}
-	) => {
-		if(!author.iconURL) author.iconURL = process.env.NORMAL_URL;
-		return EmbedBuilder.generateResponseEmbed(author, description, process.env.SUCCESS_COLOR);
-	};
-
-	EmbedBuilder.generateNeutralEmbed = (
-		description = "Interaction **successful**!", 
-		author = {name: "TLA Admin Team", url: "https://www.youtube.com/@bndh4409", iconURL: process.env.HARD_URL}
-	) => {
-		if(!author.iconURL) author.iconURL = process.env.HARD_URL;
-		return EmbedBuilder.generateResponseEmbed(author, description, process.env.NEUTRAL_COLOR);
-	};
-
-	EmbedBuilder.generateFailEmbed = (
-		description = "Something went **wrong**! Please **try again**.\nIf the issue **persists**, please contact _**@gamingpharoah**_.",
-		author = {name: "TLA Admin Team", url: "https://www.youtube.com/@bndh4409", iconURL: process.env.EXTREME_DEMON_URL}
-	) => {
-		if(!author.iconURL) author.iconURL = process.env.EXTREME_DEMON_URL;
-		return EmbedBuilder.generateResponseEmbed(author, description, process.env.FAIL_COLOR);
-	};
-}
+// TODO deregister command
 
 function loadCommands() {
 	client.commands = new Collection(); // Attach a commands property to our client which is accessible in other files
@@ -102,6 +68,8 @@ async function checkChannels() {
 	checkChannel(process.env.VETO_FORUM_ID, "Veto");
 }
 
+const Submission = mongoModels.modelData.Submission;
+const handleVetoJudgement = require("./utility/discord/submissionsVeto/handleVetoJudgement"); // Must require AFTER modelData setup or will assign Mongo Models as undefined
 async function startPendingCountdowns() {
 	const pendingThreads = await Submission.enqueue(() => 
 		Submission.find({status: "PENDING APPROVAL"})

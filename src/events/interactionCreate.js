@@ -2,13 +2,9 @@ const {Collection, Events, PermissionFlagsBits, EmbedBuilder} = require("discord
 const getAllExports = require("../utility/files/getAllExports");
 const path = require("path");
 
-let buttons;
-
-	buttons = new Collection();
-	const buttonData = getAllExports(path.join(__dirname, "..", "utility/discord/buttons"), file => !file.name.toLowerCase().endsWith("modules"));
-	buttonData.forEach(button => buttons.set(button.customId, button));
-
-
+let buttons = new Collection();
+const buttonData = getAllExports(path.join(__dirname, "..", "utility/discord/buttons"), file => !file.name.toLowerCase().endsWith("modules"));
+buttonData.forEach(button => buttons.set(button.customId, button));
 
 module.exports = {
 	name: Events.InteractionCreate,
@@ -47,7 +43,7 @@ async function handleButtonInteraction(interaction) {
 		embeds: [EmbedBuilder.generateFailEmbed()]
 	});
 
-	if(interaction.memberPermissions.has(button.permissionBits)) {
+	if(interaction.memberPermissions === undefined || interaction.memberPermissions.has(button.permissionBits)) {
 		try {
 			await button.execute(interaction);
 		} catch(error) {
@@ -55,18 +51,13 @@ async function handleButtonInteraction(interaction) {
 			
 			const errorEmbed = EmbedBuilder.generateFailEmbed();
 			if(interaction.replied || interaction.deferred) {
-				interaction.editReply({
-					embeds: [errorEmbed]
-				});
+				interaction.editReply({embeds: [errorEmbed]});
 			} else {
-				interaction.reply({
-					embeds: [errorEmbed], 
-					ephemeral: true
-				});
+				interaction.reply({embeds: [errorEmbed], ephemeral: true});
 			}
 		}
 	} else {
-		const permissionErrorEmbed = [EmbedBuilder.generateFailEmbed("**Insufficient permissions**!\nIf you believe this is **incorrect**, please contact _**@gamingpharoah**_.")];
+		const permissionErrorEmbed = EmbedBuilder.generateFailEmbed("**Insufficient permissions**!\nIf you believe this is **incorrect**, please contact _**@gamingpharoah**_.");
 		if(interaction.replied || interaction.deferred) {
 			interaction.editReply({embeds: [permissionErrorEmbed]});
 		} else {

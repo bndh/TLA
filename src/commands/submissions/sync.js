@@ -40,7 +40,7 @@ module.exports = {
 			.setMinValue(0)
 		)
 		.setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-	async execute(interaction) {
+	async execute(interaction) { // TODO fix reply (longer than 15 mins to reply :( ))
 		await interaction.deferReply({ephemeral: true});
 		
 		const mode = interaction.options.getString("mode", true);
@@ -70,7 +70,7 @@ async function forumsSetupAndSync(channelManager) {
 		channelManager.fetch(process.env.SUBMISSIONS_FORUM_ID), 
 		channelManager.fetch(process.env.VETO_FORUM_ID)
 	]);
-	handleForumsSync(promisedChannels[0], promisedChannels[1]);
+	await handleForumsSync(promisedChannels[0], promisedChannels[1]);
 }
 
 async function handleForumsSync(submissionsForum, vetoForum) {
@@ -89,7 +89,7 @@ async function intakeSetupAndSync(channelManager) {
 	promisedChannels = await Promise.all([
 		channelManager.fetch(process.env.SUBMISSIONS_INTAKE_ID), 
 		channelManager.fetch(process.env.SUBMISSIONS_FORUM_ID)]);
-	await handleIntakeSync(promisedChannels[0], promisedChannels[1], maxIntake);
+	await handleIntakeSync(promisedChannels[0], promisedChannels[1], maxIntake); // TODO maxIntake missing?
 	console.info("==> Finished Intake Sync");
 }
 
@@ -175,7 +175,7 @@ async function handleVetoSync(vetoForum, vetoThreadPromise) {
 			}
 		}
 		const videoLink = getVideosFromMessage(starterMessage, false)[0];
-
+		
 		if(!entry) {
 			entry = await Submission.enqueue(() => Submission.create({
 				threadId: fetchedThread.id, 

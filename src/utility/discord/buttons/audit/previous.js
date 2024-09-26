@@ -12,6 +12,6 @@ module.exports = {
 			interaction.message.components[0],
 			false
 		);
-		interaction.editReply(pageData);
+		await interaction.editReply(pageData);
 	}
 }

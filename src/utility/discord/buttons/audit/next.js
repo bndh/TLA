@@ -11,6 +11,6 @@ module.exports = {
 			interaction.message.embeds[0], 
 			interaction.message.components[0]
 		);
-		interaction.editReply(pageData);
+		await interaction.editReply(pageData); // {embeds: [###], components: [###]}
 	}
 }

@@ -3,12 +3,11 @@ require("dotenv").config();
 const {time, TimestampStyles} = require("discord.js");
 
 const { Judge, Submission } = require("../../../mongo/mongoModels").modelData;
-
 const getTagByEmojiCode = require("../threads/getTagByEmojiCode");
 const getVideosFromMessage = require("../messages/getVideosFromMessage");
 
 const judgementEmojiCodes = process.env.JUDGEMENT_EMOJI_CODES.split(", ");
-
+// TODO write tutorial
 module.exports = async (client, submissionThreadId) => { // Use ids as it will be a long time before we run this, at which point we will need to fetch for accuracy
 	const submissionThread = await client.channels.fetch(submissionThreadId);
 	const submissionMessage = await submissionThread.fetchStarterMessage({force: true}); // Force because reaction cache may be incorrect otherwise

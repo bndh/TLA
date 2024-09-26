@@ -1,6 +1,6 @@
 require("dotenv").config();
 
-const {SlashCommandBuilder, PermissionFlagsBits} = require("discord.js");
+const {EmbedBuilder, SlashCommandBuilder, PermissionFlagsBits} = require("discord.js");
 
 const { Judge } = require("../../mongo/mongoModels").modelData;
 
@@ -54,8 +54,8 @@ module.exports = {
 		const typeString = "a" + (vowels.includes(firstCharacterCaps) ? "n" : "") + // a/an
 						   " " +
 						   firstCharacterCaps + judgeType.substring(1); // judgeType capitalised
-		await Promise.all([deferPromise, documentPromise]);
-		interaction.editReply(`Successfully registered ${registree.toString()} as \`${typeString}\`!`);
+		await documentPromise;
+		interaction.editReply({embeds: [EmbedBuilder.generateSuccessEmbed(`Successfully registered ${registree.toString()} as **${typeString}**!`)]});
 	}
 };
 

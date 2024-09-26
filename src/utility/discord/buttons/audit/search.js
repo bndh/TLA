@@ -10,7 +10,7 @@ module.exports = {
 	
 		const auditee = await Auditee.findOne({userId: interaction.user.id}).exec();
 		if(!auditee) {
-			interaction.followUp({embeds: [EmbedBuilder.generateFailEmbed("Your information was **not recorded** in an **Audit Report**!\nIf you believe this is **incorrect**, please contact _**@gamingpharoah**_")]});
+			await interaction.followUp({embeds: [EmbedBuilder.generateFailEmbed("Your information was **not recorded** in an **Audit Report**!\nIf you believe this is **incorrect**, please contact _**@gamingpharoah**_")]});
 			return;
 		}   
 	
@@ -21,7 +21,7 @@ module.exports = {
 		const userPromise = interaction.client.users.fetch(interaction.user.id);
 		const performanceEmbedArguments = await Promise.all([auditeeBlockPromise, userPromise]);
 	
-		interaction.followUp({
+		await interaction.followUp({
 			embeds: [generatePerformanceEmbed(...performanceEmbedArguments)],
 			ephemeral: true
 		});

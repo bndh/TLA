@@ -62,7 +62,7 @@ function generateHelpEmbed(helpCategories) {
 	}));
 	return EmbedBuilder.generateNeutralEmbed(description, {name: "TLA Bot Help"})
 		.setFields(...fields)
-		.setFooter({text: "Time Limit: 90s", iconURL: "https://em-content.zobj.net/source/twitter/408/timer-clock_23f2-fe0f.png"})
+		.setFooter({text: "Time Limit: 90s", iconURL: "https://em-content.zobj.net/source/twitter/408/timer-clock_23f2-fe0f.png"});
 }
 
 function generateHelpMenu(helpCategories) {
