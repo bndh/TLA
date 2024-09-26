@@ -23,7 +23,7 @@ client = new Client({
 	]
 });
 // TODO let the LNs see whats going on in #submissions-2024 (read only list)
-(async () => {
+(async () => { // TODO bug report modal
 	mongoModels.setup();
 	await mongoose.connect(process.env.MONGODB_URI);
 	console.log("Connected to Mongoose!");
@@ -35,7 +35,6 @@ client = new Client({
 	await checkChannels();
 	startPendingCountdowns();
 })();
-// TODO deregister command
 
 function loadCommands() {
 	client.commands = new Collection(); // Attach a commands property to our client which is accessible in other files

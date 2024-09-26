@@ -29,8 +29,8 @@ module.exports = {
 
 		const counselledSubmissionIds = judgeEntry.counselledSubmissionIds;
 		let permissibleStatuses;
-		if(judgeEntry.judgeType === "nominator") permissibleStatuses = ["AWAITING VETO", "PENDING APPROVAL"];
-		else permissibleStatuses = ["AWAITING VETO", "AWAITING DECISION"]; // Admin
+		if(judgeEntry.judgeType === "nominator") permissibleStatuses = ["AWAITING VETO", "PENDING APPROVAL"]; 
+		else permissibleStatuses = ["AWAITING VETO", "AWAITING DECISION", "PENDING APPROVAL"]; // Admin
 		
 		const permissibleSubmissions = await Submission.enqueue(() => // While we could just return the first result, we pick one randomly so that if a judge was stuck with a submission, they should be able to have the command generate a different one in a few tries 
 			Submission.aggregate([
