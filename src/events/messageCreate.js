@@ -12,9 +12,8 @@ module.exports = {
 };
 // TODO add response embed for whether or not the submission is already in the system
 async function handleMessage(message) {
-	if(message.author.bot) return;
 	if(message.channelId !== process.env.SUBMISSIONS_INTAKE_ID) return;
-	//TODO crosspost from overture discord
+
 	const submissionsForum = await message.client.channels.fetch(process.env.SUBMISSIONS_FORUM_ID);
 	createValidatedReactedVideoThreads(getVideosFromMessage(message), submissionsForum);
 }

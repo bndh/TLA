@@ -35,7 +35,7 @@ async function handleChatInputCommand(interaction) {
 		}
 	}
 }
-
+// TODO work on async
 async function handleButtonInteraction(interaction) {
 	const button = buttons.get(interaction.customId);
 	if(!button) interaction.reply({

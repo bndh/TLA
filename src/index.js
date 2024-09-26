@@ -17,7 +17,7 @@ client = new Client({
 		GatewayIntentBits.MessageContent
 	],
 	partials: [
-		Partials.Channel, // Required to listen for uncached things
+		Partials.Channel, 
 		Partials.Message,
 		Partials.Reaction
 	]
