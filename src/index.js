@@ -15,11 +15,11 @@ client = new Client({
 		GatewayIntentBits.GuildMembers,
 		GatewayIntentBits.GuildMessages,
 		GatewayIntentBits.MessageContent
-	],
-	partials: [
-		Partials.Channel, 
-		Partials.Message,
-		Partials.Reaction
+	], // TODO tplive not getting updated
+	partials: [ // TODO CHECK WHY ZARY JUDGE SO MUCH ? COULD BE ISSUE WITH NOT CHECKING DUPES FOR UNREACT / REREACT
+		Partials.Channel, // TODO improve judge sync efficiency
+		Partials.Message, // TODO judge self-stats
+		Partials.Reaction // TODO automatically remove / add roles for delist and register
 	] // TODO rebrand to TGA
 }); // TODO NAT overwrite veto
 // TODO let the LNs see whats going on in #submissions-2024 (read only list)

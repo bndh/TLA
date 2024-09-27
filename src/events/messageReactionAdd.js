@@ -14,9 +14,9 @@ const openEmojiCodes = process.env.OPEN_EMOJI_CODES.split(", ");
 
 module.exports = {
 	name: Events.MessageReactionAdd,
-	execute(messageReaction, user) { // TODO: Some kind of caching issue here
-		if(messageReaction.partial) messageReaction.fetch().then(reaction => handleIntactReaction(reaction, user));
-		else handleIntactReaction(messageReaction, user);
+	async execute(messageReaction, user) { // TODO: Some kind of caching issue here
+		if(messageReaction.partial) messageReaction = await messageReaction.fetch();
+		handleIntactReaction(messageReaction, user);
 	}
 };
 
@@ -27,24 +27,33 @@ async function handleIntactReaction(messageReaction, user) {
 	if(![process.env.VETO_FORUM_ID, process.env.SUBMISSIONS_FORUM_ID].includes(forum.id)) return;
 
 	const submissionThread = messageReaction.message.channel;
-	if(forum.id === process.env.SUBMISSIONS_FORUM_ID) await handleSubmissionResponse(messageReaction, submissionThread);
+	if(forum.id === process.env.SUBMISSIONS_FORUM_ID) handleSubmissionResponse(messageReaction, submissionThread, user);
 	else if(forum.id === process.env.VETO_FORUM_ID) handleVetoResponse(messageReaction, submissionThread, user);
 }
 
-async function handleSubmissionResponse(messageReaction, submissionThread) {
+async function handleSubmissionResponse(messageReaction, submissionThread, judge) {
+	const judgeDoc = await Judge.enqueue(() => Judge.findOne({userId: judge.id}).exec());
+	if(!judgeDoc.counselledSubmissionIds.includes(submissionThread.id)) { // Don't add something that's already there
+		Judge.enqueue(() => Judge.updateOne({userId: judge.id}, {$push: {counselledSubmissionIds: submissionThread.id}}));
+	}
 	if(messageReaction.emoji.name === judgementEmojiCodes[0]) await handleSubmissionApprove(submissionThread, messageReaction.message);
 	else if(messageReaction.emoji.name === judgementEmojiCodes[1]) handleSubmissionReject(submissionThread);
 }
 
-function handleVetoResponse(messageReaction, submissionThread, judge) {
+async function handleVetoResponse(messageReaction, submissionThread, judge) {
+	console.log("Fired Veto Response for " + judge.displayName);
 	if(!judgementEmojiCodes.includes(messageReaction.emoji.name)) return;
-
+	console.log("It was a judgement emoji");
 	const forum = submissionThread.parent;
 	
 	const closedTagIds = judgementEmojiCodes.map(emojiCode => getTagByEmojiCode(forum, emojiCode).id);
 	if(submissionThread.appliedTags.some(appliedTagId => closedTagIds.includes(appliedTagId))) return; // Indicates that the submission is closed and any additional reaction would not have an effect
-
-	Judge.enqueue(() => Judge.updateOne({userId: judge.id}, {$push: {counselledSubmissionIds: submissionThread.id}}));
+	console.log("Its not closed");
+	const judgeDoc = await Judge.enqueue(() => Judge.findOne({userId: judge.id}).exec());
+	if(!judgeDoc.counselledSubmissionIds.includes(submissionThread.id)) { // Don't add something that's already there
+		console.log("It didn't already exist");
+		Judge.enqueue(() => Judge.updateOne({userId: judge.id}, {$push: {counselledSubmissionIds: submissionThread.id}}).exec());
+	}
 
 	const pendingTagId = getTagByEmojiCode(forum, openEmojiCodes[1]).id; 
 	if(submissionThread.appliedTags.some(appliedTagId => appliedTagId === pendingTagId)) return; // Indicates that the thread is pending, which this reaction should not affect for they close after a set amount of time

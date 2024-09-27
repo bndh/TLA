@@ -1,9 +1,9 @@
-const { PermissionFlagsBits } = require("discord.js");
+const { PermissionsBitField } = require("discord.js");
 const getTurnedPageData = require("./helperModules/getTurnedPageData");
 
 module.exports = {
 	customId: "previous",
-	permissionBits: PermissionFlagsBits.Administrator,
+	permissionBits: PermissionsBitField.Flags.Administrator,
 	async execute(interaction) {
 		await interaction.deferUpdate();
 		const pageData = await getTurnedPageData(

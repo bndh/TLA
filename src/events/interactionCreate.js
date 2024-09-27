@@ -43,7 +43,7 @@ async function handleButtonInteraction(interaction) {
 		embeds: [EmbedBuilder.generateFailEmbed()]
 	});
 
-	if(interaction.memberPermissions === undefined || interaction.memberPermissions.has(button.permissionBits)) {
+	if(button.permissionBits === undefined || interaction.memberPermissions.has(button.permissionBits)) {
 		try {
 			await button.execute(interaction);
 		} catch(error) {

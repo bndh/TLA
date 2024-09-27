@@ -54,7 +54,7 @@ module.exports = {
 			responseText += "**unjudged layout** ";
 		}
 		responseText += `at: ${thread.url}`; // All threads are titled "New Submission!" (shown in the shortcut of thread.url), so no need for any closing punctuation here
-
+		responseText += "\n_Please note that this command may not be accurate due to recent bot downtime..._"
 		await interaction.editReply(responseText);
 	}
 };
