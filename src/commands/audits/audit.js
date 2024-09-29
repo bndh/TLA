@@ -24,6 +24,9 @@ module.exports = {
 		await interaction.deferReply(); // Must await defer for proper error catching externally
 	
 		const overwrite = interaction.options.getBoolean("overwrite", false) ?? false;
+		
+		console.info(`COMMAND ${this.data.name} USED BY ${interaction.user.id} IN ${interaction.channelId} WITH overwrite ${overwrite}`);
+
 		let snapshotPromise;
 		if(overwrite) {
 			snapshotPromise = snapshot(interaction.client);

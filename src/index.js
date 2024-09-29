@@ -24,9 +24,9 @@ client = new Client({
 }); // TODO NAT overwrite veto
 // TODO let the LNs see whats going on in #submissions-2024 (read only list)
 (async () => { // TODO bug report modal
-	mongoModels.setup();
+	mongoModels.setup(); // TODO status command
 	await mongoose.connect(process.env.MONGODB_URI);
-	console.log("Connected to Mongoose!");
+	console.log("Connected to Mongoose!"); // TODO SYNC APPROVING VETO THINGS FOR A REASON ?????????????????????????????????
 
 	pushEmbedFunctions();
 	loadCommands();
@@ -34,6 +34,12 @@ client = new Client({
 	await client.login(process.env.TOKEN);
 	await checkChannels();
 	startPendingCountdowns();
+
+	// const {e} = require("./commands/submissions/sync");
+	// const submissionsForum = await client.channels.fetch(process.env.SUBMISSIONS_FORUM_ID);
+	// const vetoForum = await client.channels.fetch(process.env.VETO_FORUM_ID);
+	// const forumMap = new Map([[submissionsForum, ["admin"]], [vetoForum, ["admin", "nominator"]]]);
+	// e(forumMap, ["admin", "nominator"]);
 })();
 
 function loadCommands() {
@@ -80,7 +86,7 @@ async function startPendingCountdowns() {
 	for(const pendingThread of pendingThreads) {
 		const timeout = pendingThread.expirationTime - Date.now().valueOf();
 		setTimeout(() => handleVetoJudgement(client, pendingThread.threadId), timeout);
-		console.log(`Set timeout for ${pendingThread.threadId} at ${timeout > 0 ? timeout : 0}ms`);
+		console.log(`Setup timeout for ${pendingThread.threadId}, ending in ${timeout > 0 ? timeout : 0}ms`);
 	}
 }
 

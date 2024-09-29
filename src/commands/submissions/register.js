@@ -8,7 +8,7 @@ const getAllThreads = require("../../utility/discord/threads/getAllThreads");
 const getTagByEmojiCode = require("../../utility/discord/threads/getTagByEmojiCode");
 const hasReacted = require("../../utility/discord/reactions/hasReacted");
 
-const judgementEmojiCodes = process.env.JUDGEMENT_EMOJI_CODES.split(", ");
+const JUDGEMENT_EMOJI_CODES = process.env.JUDGEMENT_EMOJI_CODES.split(", ");
 const vowels = ["A", "E", "I", "O", "U"];
 
 module.exports = {
@@ -35,6 +35,8 @@ module.exports = {
 
 		const registree = interaction.options.getUser("registree", true);
 		const judgeType = interaction.options.getString("judge-type", true);
+
+		console.info(`COMMAND ${this.data.name} USED BY ${interaction.user.id} IN ${interaction.channelId} WITH registree ${registree} AND judgeType ${judgeType}`);
 
 		let forumIds;
 		if(judgeType === "nominator") forumIds = [process.env.VETO_FORUM_ID];
@@ -68,14 +70,14 @@ async function tallyRegistreeSubmissions(forums, registreeId) {
 	for(const threads of threadGroups) {
 		if(threads.size === 0) continue;
 		const forum = threads.at(0).parent;
-		const closedTagIds = judgementEmojiCodes.map(emojiCode => getTagByEmojiCode(forum, emojiCode).id);
+		const closedTagIds = JUDGEMENT_EMOJI_CODES.map(emojiCode => getTagByEmojiCode(forum, emojiCode).id);
 
 		for(let i = 0; i < threads.size; i++) {
 			tallyPromises[i] = new Promise(async resolve => {
 				const thread = threads.at(i);
 				const starterMessage = await thread.fetchStarterMessage();
 	
-				const reacted = await hasReacted(starterMessage, registreeId, judgementEmojiCodes);
+				const reacted = await hasReacted(starterMessage, registreeId, JUDGEMENT_EMOJI_CODES);
 				if(reacted) {
 					const threadClosed = closedTagIds.includes(thread.appliedTags[0]);
 					if(threadClosed) totalSubmissionsClosed++;

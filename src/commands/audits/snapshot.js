@@ -20,6 +20,9 @@ module.exports = {
 		await interaction.deferReply({ephemeral: true});
 		
 		const overwrite = interaction.options.getBoolean("overwrite", false) ?? false;
+
+		console.info(`COMMAND ${this.data.name} USED BY ${interaction.user.id} IN ${interaction.channelId} WITH overwrite ${overwrite}`);
+
 		if(!overwrite) {
 			const previousSnapshotExists = await Info.exists({id: "snapshotCreationTime"});
 			if(previousSnapshotExists) {

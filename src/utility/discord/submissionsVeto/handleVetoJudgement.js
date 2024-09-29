@@ -6,7 +6,7 @@ const { Judge, Submission } = require("../../../mongo/mongoModels").modelData;
 const getTagByEmojiCode = require("../threads/getTagByEmojiCode");
 const getVideosFromMessage = require("../messages/getVideosFromMessage");
 
-const judgementEmojiCodes = process.env.JUDGEMENT_EMOJI_CODES.split(", ");
+const JUDGEMENT_EMOJI_CODES = process.env.JUDGEMENT_EMOJI_CODES.split(", ");
 
 module.exports = async (client, submissionThreadId) => { // Use ids as it will be a long time before we run this, at which point we will need to fetch for accuracy
 	const submissionThread = await client.channels.fetch(submissionThreadId);
@@ -40,9 +40,9 @@ module.exports = async (client, submissionThreadId) => { // Use ids as it will b
 function tallyJudgementReactions(reactionManager) {
 	const counts = new Map();
 	
-	for(let i = 0; i < judgementEmojiCodes.length; i++) {
-		const reaction = reactionManager.resolve(judgementEmojiCodes[i]);
-		counts.set(reaction.count, judgementEmojiCodes[i]);
+	for(let i = 0; i < JUDGEMENT_EMOJI_CODES.length; i++) {
+		const reaction = reactionManager.resolve(JUDGEMENT_EMOJI_CODES[i]);
+		counts.set(reaction.count, JUDGEMENT_EMOJI_CODES[i]);
 	}
 
 	return [...counts.entries()].sort((a, b) => b[0] - a[0]); // Sorts in descending order

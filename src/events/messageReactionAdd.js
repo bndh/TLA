@@ -1,6 +1,6 @@
 require("dotenv").config();
 
-const {Events} = require("discord.js");
+const {Events, EmbedBuilder} = require("discord.js");
 
 const { Judge } = require("../mongo/mongoModels").modelData;
 
@@ -9,8 +9,8 @@ const handleSubmissionReject = require("../utility/discord/submissionsVeto/handl
 const handleSubmissionApprove = require("../utility/discord/submissionsVeto/handleSubmissionApprove");
 const handleVetoPending = require("../utility/discord/submissionsVeto/handleVetoPending");
 
-const judgementEmojiCodes = process.env.JUDGEMENT_EMOJI_CODES.split(", ");
-const openEmojiCodes = process.env.OPEN_EMOJI_CODES.split(", ");
+const JUDGEMENT_EMOJI_CODES = process.env.JUDGEMENT_EMOJI_CODES.split(", ");
+const OPEN_EMOJI_CODES = process.env.OPEN_EMOJI_CODES.split(", ");
 
 module.exports = {
 	name: Events.MessageReactionAdd,
@@ -23,10 +23,12 @@ module.exports = {
 async function handleIntactReaction(messageReaction, user) {
 	if(user.id === process.env.CLIENT_ID) return;
 	const forum = messageReaction.message.channel.parent;
-	if(!forum) return;
-	if(![process.env.VETO_FORUM_ID, process.env.SUBMISSIONS_FORUM_ID].includes(forum.id)) return;
+	if(!forum) return; // Indicates that it's not a thread
 
 	const submissionThread = messageReaction.message.channel;
+
+	console.info(`JUDGEMENT REACTION BY ${user.id} IN ${submissionThread.id}`)
+
 	if(forum.id === process.env.SUBMISSIONS_FORUM_ID) handleSubmissionResponse(messageReaction, submissionThread, user);
 	else if(forum.id === process.env.VETO_FORUM_ID) handleVetoResponse(messageReaction, submissionThread, user);
 }
@@ -36,26 +38,28 @@ async function handleSubmissionResponse(messageReaction, submissionThread, judge
 	if(!judgeDoc.counselledSubmissionIds.includes(submissionThread.id)) { // Don't add something that's already there
 		Judge.enqueue(() => Judge.updateOne({userId: judge.id}, {$push: {counselledSubmissionIds: submissionThread.id}}));
 	}
-	if(messageReaction.emoji.name === judgementEmojiCodes[0]) await handleSubmissionApprove(submissionThread, messageReaction.message);
-	else if(messageReaction.emoji.name === judgementEmojiCodes[1]) handleSubmissionReject(submissionThread);
+	if(messageReaction.emoji.name === JUDGEMENT_EMOJI_CODES[0]) await handleSubmissionApprove(submissionThread, messageReaction.message);
+	else if(messageReaction.emoji.name === JUDGEMENT_EMOJI_CODES[1]) handleSubmissionReject(submissionThread);
 }
 
 async function handleVetoResponse(messageReaction, submissionThread, judge) {
-	console.log("Fired Veto Response for " + judge.displayName);
-	if(!judgementEmojiCodes.includes(messageReaction.emoji.name)) return;
-	console.log("It was a judgement emoji");
+	if(!JUDGEMENT_EMOJI_CODES.includes(messageReaction.emoji.name)) return;
 	const forum = submissionThread.parent;
 	
-	const closedTagIds = judgementEmojiCodes.map(emojiCode => getTagByEmojiCode(forum, emojiCode).id);
-	if(submissionThread.appliedTags.some(appliedTagId => closedTagIds.includes(appliedTagId))) return; // Indicates that the submission is closed and any additional reaction would not have an effect
-	console.log("Its not closed");
+	const closedTagIds = JUDGEMENT_EMOJI_CODES.map(emojiCode => getTagByEmojiCode(forum, emojiCode).id);
+	if(submissionThread.appliedTags.some(appliedTagId => closedTagIds.includes(appliedTagId))) { 
+		messageReaction.users.remove(judge.id); // Prevents people from cheating with closedSubmissions on sync
+		try {judge.send(EmbedBuilder.generateFailEmbed("Please do **not react** to **closed** submissions!"));
+		} catch(ignored) {} // Error thrown if attempt to DM a user with DMs off
+		return;
+	} 
+	
 	const judgeDoc = await Judge.enqueue(() => Judge.findOne({userId: judge.id}).exec());
 	if(!judgeDoc.counselledSubmissionIds.includes(submissionThread.id)) { // Don't add something that's already there
-		console.log("It didn't already exist");
 		Judge.enqueue(() => Judge.updateOne({userId: judge.id}, {$push: {counselledSubmissionIds: submissionThread.id}}).exec());
 	}
 
-	const pendingTagId = getTagByEmojiCode(forum, openEmojiCodes[1]).id; 
+	const pendingTagId = getTagByEmojiCode(forum, OPEN_EMOJI_CODES[1]).id; 
 	if(submissionThread.appliedTags.some(appliedTagId => appliedTagId === pendingTagId)) return; // Indicates that the thread is pending, which this reaction should not affect for they close after a set amount of time
 
 	if(meetsReactionThreshold(messageReaction, messageReaction.message)) {
@@ -68,10 +72,12 @@ function meetsReactionThreshold(messageReaction, message) {
 
 	if(count >= +process.env.VETO_THRESHOLD + 2) return true; // + 2 to account for the bot's reactions
 
-	const emojiCodeIndex = judgementEmojiCodes.findIndex(element => element === messageReaction.emoji.name);
-	const otherEmojiCode = judgementEmojiCodes[(emojiCodeIndex + 1) % judgementEmojiCodes.length]; // Increment to find the other judgement emoji
+	const emojiCodeIndex = JUDGEMENT_EMOJI_CODES.findIndex(element => element === messageReaction.emoji.name);
+	const otherEmojiCode = JUDGEMENT_EMOJI_CODES[(emojiCodeIndex + 1) % JUDGEMENT_EMOJI_CODES.length]; // Increment to find the other judgement emoji
 	const otherReaction = message.reactions.resolve(otherEmojiCode);
-	count += otherReaction.count;
+	if(otherReaction) count += otherReaction.count;
+	else console.info(`No other reaction in channel ${message.channel.id}`); // TODO investigate
+	
 
 	if(count >= +process.env.VETO_THRESHOLD + 2) return true;
 	else return false;

@@ -18,9 +18,12 @@ async function handleIntactReaction(messageReaction, user) {
 	const thread = messageReaction.message.channel;
 	const forum = thread.parent;
 	if(!forum) return;
-	if(![process.env.VETO_FORUM_ID, process.env.SUBMISSIONS_FORUM_ID].includes(forum.id)) return;
 	
-	const openTagIds = OPEN_EMOJI_CODES.map(emojiCode => getTagByEmojiCode(forum, emojiCode).id);
+	let openTagIds;
+	if(forum.id === process.env.VETO_FORUM_ID) openTagIds = OPEN_EMOJI_CODES.map(emojiCode => getTagByEmojiCode(forum, emojiCode).id);
+	else if(forum.id === process.env.SUBMISSIONS_FORUM_ID) openTagIds = [getTagByEmojiCode(forum, OPEN_EMOJI_CODES[0])];
+	else return;
+	
 	if(!thread.appliedTags.some(appliedTagId => openTagIds.includes(appliedTagId))) return;
 	Judge.enqueue(() => Judge.updateOne({userId: user.id}, {$pull: {counselledSubmissionIds: thread.id}}).exec());
 }
