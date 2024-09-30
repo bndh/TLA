@@ -13,7 +13,7 @@ client = new Client({
 		GatewayIntentBits.Guilds,
 		GatewayIntentBits.GuildMessageReactions,
 		GatewayIntentBits.GuildMembers,
-		GatewayIntentBits.GuildMessages,
+		GatewayIntentBits.GuildMessages, // TODO check blue 
 		GatewayIntentBits.MessageContent
 	], // TODO tplive not getting updated
 	partials: [ // TODO CHECK WHY ZARY JUDGE SO MUCH ? COULD BE ISSUE WITH NOT CHECKING DUPES FOR UNREACT / REREACT
@@ -33,7 +33,6 @@ client = new Client({
 	registerListeners();
 	await client.login(process.env.TOKEN);
 	await checkChannels();
-	startPendingCountdowns();
 
 	// const {e} = require("./commands/submissions/sync");
 	// const submissionsForum = await client.channels.fetch(process.env.SUBMISSIONS_FORUM_ID);
@@ -71,23 +70,6 @@ async function checkChannels() {
 	checkChannel(process.env.SUBMISSIONS_INTAKE_ID, "Intake");
 	checkChannel(process.env.SUBMISSIONS_FORUM_ID, "Submissions");
 	checkChannel(process.env.VETO_FORUM_ID, "Veto");
-}
-
-const Submission = mongoModels.modelData.Submission;
-const handleVetoJudgement = require("./utility/discord/submissionsVeto/handleVetoJudgement"); // Must require AFTER modelData setup or will assign Mongo Models as undefined
-async function startPendingCountdowns() {
-	const pendingThreads = await Submission.enqueue(() => 
-		Submission.find({status: "PENDING APPROVAL"})
-				  .select({threadId: 1, expirationTime: 1, _id: 0})																
-				  .exec()
-	);
-	if(!pendingThreads) return;
-
-	for(const pendingThread of pendingThreads) {
-		const timeout = pendingThread.expirationTime - Date.now().valueOf();
-		setTimeout(() => handleVetoJudgement(client, pendingThread.threadId), timeout);
-		console.log(`Setup timeout for ${pendingThread.threadId}, ending in ${timeout > 0 ? timeout : 0}ms`);
-	}
 }
 
 async function checkChannel(channelId, channelName) {

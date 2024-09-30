@@ -69,6 +69,7 @@ module.exports = {
 
 		interaction.editReply("Sync complete!");
 	},
+	pendingThreadDocs: new Map(),
 	e
 };
 
@@ -283,6 +284,12 @@ async function handleSubmissionSync(submissionsForum, submissionsThreadPromise) 
 	}
 }
 
+const VETO_SALVAGE_CODE = "SaV";
+const SUBMISSIONS_SALVAGE_CODE = "SaS";
+const VETO_SYNC_CODE = "SyV";
+const SUBMISSIONS_SYNC_CODE = "SyS";
+const JUDGE_SYNC_CODE = "SyJ";
+
 async function e(forumJudgeTypeMap, judgeTypes) {
 	const judgeTypeMap = new Map( // Map(judgeTypes => Map(judgeIds => judges))
 		await Promise.all(judgeTypes.map(judgeType =>
@@ -381,52 +388,73 @@ function createIdTagMap(...tags) {
 	return tagMap;
 }
 
-const VETO_TAGS = [...JUDGEMENT_EMOJI_CODES, ...OPEN_EMOJI_CODES];
-async function b(vetoForum) {
-	const emojiTagMap = new Map(
-		vetoForum.availableTags
-			.filter(tag => VETO_TAGS.includes(tag))
-			.map(tag => [tag.emoji.name, tag])
-	);
-	
-	const idTagMap = new Map(
-		vetoForum.availableTags
-			.filter(tag => VETO_TAGS.includes(tag))
-			.map(tag => [tag.id, tag])
-	);
-	const pendingTag = vetoForum.availableTags.find(tag => tag.emoji.name === OPEN_EMOJI_CODES[1]);
+const VETO_EMOJI_CODES = [...JUDGEMENT_EMOJI_CODES, ...OPEN_EMOJI_CODES];
+async function handleVetoSync2(vetoForum, submissionsForum) {
+	const idTagMap = generateIdTagMap(vetoForum.availableTags);
+	const waitingTag = vetoForum.availableTags.find(tag => tag.emoji.name === OPEN_EMOJI_CODES[0]);
+	const pendingTagId = vetoForum.availableTags.find(tag => tag.emoji.name === OPEN_EMOJI_CODES[1]).id;
 
 	const threadBulk = await getAllThreads(vetoForum);
 	for(const bulkThread of threadBulk.values()) {
-		const threadDocPromise = Submission.enqueue(() => Submission.findOne({threadId: bulkThread.id}).exec());
-		let fetchedThread = await vetoForum.threads.fetch(bulkThread, {force: true});
-		let starterMessage;
-		try { starterMessage = await fetchedThread.fetchStarterMessage({force: true});
-		} catch(ignored) {}
-		let threadDoc = await threadDocPromise;
+		let {fetchedThread, threadDoc, starterMessage} = await getThreadDocAndMessage(vetoForum, bulkThread.id);
+		({fetchedThread, threadDoc, starterMessage} = await salvageThreadData(fetchedThread, threadDoc, starterMessage, undefined, submissionsForum, vetoForum, VETO_SALVAGE_CODE)); // In case some data cannot be found or does not exist (set approved tag map as undefined as veto will not go down that path)
+		if(!fetchedThread || !threadDoc || !starterMessage) continue; // Any data missing
 		
-		const salvagedInfo = salvageThreadInfo(fetchedThread, threadDoc, starterMessage, emojiTagMap, client); // In case some data cannot be found or does not exist
-		fetchedThread = salvagedInfo.thread;
-		starterMessage = salvagedInfo.starterMessage;
-		threadDoc = salvagedInfo.threadDoc;
+		let appliedTag = idTagMap.get(fetchedThread.appliedTags[0]);
+		
+		if(!VETO_EMOJI_CODES.includes(appliedTag.emoji)) {
+			await fetchedThread.setAppliedTags([waitingTag.id]);
+			appliedTag = waitingTag;
+		}
+	
+		if(appliedTag.name === "Awaiting Veto") await handleAwaitingVetoThread(fetchedThread, starterMessage, pendingTagId);
+		else if(appliedTag.name === "Pending Approval") handlePendingApprovalThread(fetchedThread, threadDoc, starterMessage, pendingTagId);
+		await matchThreadDocStatus(threadDoc, appliedTag.name);
 	}
 }
 
+const SUBMISSION_EMOJI_CODES = [...JUDGEMENT_EMOJI_CODES, OPEN_EMOJI_CODES[0]];
+async function handleSubmissionSync2(submissionsForum, vetoForum) {
+	const idTagMap = generateIdTagMap(submissionsForum.availableTags);
+	const approvedTagId = submissionsForum.availableTags.find(tag => tag.emoji.name === JUDGEMENT_EMOJI_CODES[0]);
+
+	const threadBulk = await getAllThreads(submissionsForum);
+	for(const bulkThread of threadBulk.values()) {
+		let {fetchedThread, threadDoc, starterMessage} = await getThreadDocAndMessage(vetoForum, bulkThread.id);
+		({fetchedThread, threadDoc, starterMessage} = await salvageThreadData(fetchedThread, threadDoc, starterMessage, approvedTagId, submissionsForum, vetoForum, SUBMISSIONS_SALVAGE_CODE)); // In case some data cannot be found or does not exist (set approved tag map as undefined as veto will not go down that path)
+		if(!fetchedThread || !threadDoc || !starterMessage) continue;
+		
+		let appliedTag = idTagMap.get(fetchedThread.appliedTags[0]);
+
+		if(!SUBMISSION_EMOJI_CODES.includes(appliedTag.emoji)) {
+			await fetchedThread.setAppliedTags([waitingTag.id]);
+			appliedTag = waitingTag;
+		}
+
+		if(appliedTag.name === "Awaiting Decision") await handleAwaitingDecisionThread(fetchedThread, starterMessage, pendingTagId);
+		await matchThreadDocStatus(threadDoc, appliedTag.name);
+	}
+}
+// TODO probably already have one of the forums stored
 const VETO_STATUSES = ["AWAITING VETO", "PENDING APPROVAL", "APPROVED", "VETOED"];
-const SUBMISSION_STATUSES = ["AWAITING DECISION", "DENIED"];
-async function salvageThreadInfo(thread, threadDoc, starterMessage, emojiTagMap, client) {
+
+async function salvageThreadData(thread, threadDoc, starterMessage, approvedTagId, submissionsForum, vetoForum, salvageTag = "Sa") {
 	if(!threadDoc && !starterMessage) {
 		await thread.delete("FORUM SYNC: Could not salvage.");
+		logSyncMessage(salvageTag, `DELETED thread ${thread.id}`, "Missing both thread doc and starter message");
 		return;
-	} else if(!threadDoc && starterMessage) return await salvageFromNoThreadDoc(thread, starterMessage, emojiTagMap, client);
-	else if(threadDoc && !starterMessage) return await salvageFromNoStarterMessage(thread, threadDoc);
-	return {thread: thread, threadDoc: threadDoc, starterMessage: starterMessage};
+	}
+	if(!threadDoc && starterMessage) return await salvageFromNoThreadDoc(thread, starterMessage, approvedTagId, submissionsForum, vetoForum, salvageTag);
+	if(threadDoc && !starterMessage) return await salvageFromNoStarterMessage(thread, threadDoc, submissionsForum, vetoForum, salvageTag);
+
+	return {fetchedThread: thread, threadDoc: threadDoc, starterMessage: starterMessage}; // No salvaging required
 }
 
-async function salvageFromNoThreadDoc(thread, forum, starterMessage, emojiTagMap, idTagMap, client) {
+async function salvageFromNoThreadDoc(thread, forum, starterMessage, approvedTagId, submissionsForum, vetoForum, salvageTag) {
 	const videoLink = getVideosFromMessage(starterMessage, false)[0]; // No attachments at this stage, just 1 video
 	if(!videoLink) {
 		await thread.delete("FORUM SYNC: Could not salvage due to missing video link.");
+		logSyncMessage(salvageTag, `DELETED thread ${thread.id}`, "Missing both thread doc and video link");
 		return;
 	} 
 
@@ -434,16 +462,18 @@ async function salvageFromNoThreadDoc(thread, forum, starterMessage, emojiTagMap
 	let otherThreadDoc = await Submission.enqueue(() => Submission.findOne({videoLink: {$regex: new RegExp(youtubeMatch[1])}}).exec());
 	if(!otherThreadDoc) {
 		const newThreadDoc = await Submission.create({threadId: thread.id, videoLink: videoLink, status: "TEMP"}); // Status assigned later
-		return {thread: thread, threadDoc: newThreadDoc, starterMessage: starterMessage};
+		logSyncMessage(salvageTag, `CREATED NEW DOC for thread ${thread.id}`, "No alternative doc was found");
+		return {fetchedThread: thread, threadDoc: newThreadDoc, starterMessage: starterMessage};
 	}
 	
-	const otherThreadForum = await client.channels.fetch(VETO_STATUSES.includes(otherThreadDoc.status) ? process.env.VETO_FORUM_ID : process.env.SUBMISSIONS_FORUM_ID);
+	const otherThreadForum = VETO_STATUSES.includes(otherThreadDoc.status) ? vetoForum : submissionsForum;
 	let otherThread;
-	try { // TODO probably already have one of the forums stored
+	try { 
 		otherThread = await otherThreadForum.threads.fetch(otherThreadDoc.threadId);
 	} catch(error) { // otherThread does not exist
 		otherThreadDoc = await redirectSaveSubmissionDoc(otherThreadDoc, thread.id);
-		return {thread: thread, threadDoc: otherThreadDoc, starterMessage: starterMessage}; // Perform regular processing on this thread
+		logSyncMessage(salvageTag, `REDIRECTED OTHER DOC to thread ${thread.id}`, "Alternative doc did not point to a real thread");
+		return {fetchedThread: thread, threadDoc: otherThreadDoc, starterMessage: starterMessage}; // Perform regular processing on this thread
 	}
 
 	if(otherThreadForum.id === process.env.VETO_FORUM_ID) {
@@ -453,36 +483,58 @@ async function salvageFromNoThreadDoc(thread, forum, starterMessage, emojiTagMap
 				otherThreadStarterMessage = await otherThread.fetchStarterMessage({force: true});
 			} catch(error) { // Point doc to the current thread; other thread will be deleted once we reach it
 				otherThreadDoc = await redirectSaveSubmissionDoc(otherThreadDoc, thread.id);
-				return {thread: thread, threadDoc: otherThreadDoc, starterMessage: starterMessage};
+				logSyncMessage(salvageTag, `REDIRECTED OTHER DOC to thread ${thread.id}`, "Competitor veto thread did not have a starter message");
+				return {fetchedThread: thread, threadDoc: otherThreadDoc, starterMessage: starterMessage};
 			}
 			const reactionCount = sumReactions(starterMessage);
 			const otherReactionCount = sumReactions(otherThreadStarterMessage);
 			if(reactionCount > otherReactionCount) {
-				otherThreadDoc = await redirectSaveSubmissionDoc(otherThreadDoc, thread.id)
-				return {thread: thread, threadDoc: otherThreadDoc, starterMessage: starterMessage};
+				otherThreadDoc = await redirectSaveSubmissionDoc(otherThreadDoc, thread.id);
+				logSyncMessage(salvageTag, `REDIRECTED OTHER DOC to thread ${thread.id}`, "Competitor veto thread had less reactions");
+				return {fetchedThread: thread, threadDoc: otherThreadDoc, starterMessage: starterMessage};
 			} else {
 				await thread.delete("FORUM SYNC: Deleted as matching veto thread had more votes.");
+				logSyncMessage(salvageTag, `DELETED thread ${thread.id}`, "Competitor veto thread had more reactions");
 				return;
 			}
 		} else { // Submissions
-			await thread.setAppliedTags([emojiTagMap.get(JUDGEMENT_EMOJI_CODES[0]).id]);
+			await thread.setAppliedTags([approvedTagId]);
+			logSyncMessage(salvageTag, `SET TAG APPROVED for thread ${thread.id}`, "Matching doc points to veto forum");
 			return;
 		}
 	} else {
 		if(forum.id === process.env.VETO_FORUM_ID) {
 			otherThreadDoc = await redirectSaveSubmissionDoc(otherThreadDoc, thread.id);
-			return {thread: thread, threadDoc: otherThreadDoc, starterMessage: starterMessage};
+			logSyncMessage(salvageTag, `REDIRECTED OTHER DOC to thread ${thread.id}`, "Matching doc points to submissions forum");
+			return {fetchedThread: thread, threadDoc: otherThreadDoc, starterMessage: starterMessage};
 		} else { // Submissions
-			await thread.delete("FORUM SYNC: Deleted as matching thread was found during forum sync.");
-			return;
+			const threadEmojiCode = idTagMap.get(thread.appliedTags[0]).emoji.name;
+			const otherThreadEmojiCode = idTagMap.get(otherThread.appliedTags[0]).emoji.name;
+			if(threadEmojiCode === otherThreadEmojiCode) {
+				await thread.delete("FORUM SYNC: Deleted as matching thread was found during forum sync.");
+				logSyncMessage(salvageTag, `DELETED thread ${thread.id}`, "Matching thread shares tag");
+				return;
+			}
+
+			const threadClosed = JUDGEMENT_EMOJI_CODES.includes(threadEmojiCode);
+			const otherThreadClosed = JUDGEMENT_EMOJI_CODES.includes(otherThreadEmojiCode);
+			if(!threadClosed && otherThreadClosed) {
+				await thread.delete("FORUM SYNC: Deleted as matching thread was found during forum sync.");
+				logSyncMessage(salvageTag, `DELETED thread ${thread.id}`, "Matching thread holds closed tag while thread is open");
+				return;
+			}
+			otherThreadDoc = await redirectSaveSubmissionDoc(otherThreadDoc, thread.id); // Other doc will delete as it no longer has a doc
+			logSyncMessage(salvageTag, `REDIRECTED OTHER DOC to thread ${thread.id}`, "Matching thread holds open tag while thread is closed");
+			return {fetchedThread: thread, threadDoc: otherThreadDoc, starterMessage: starterMessage}; 
 		}
 	}
 }
 
-async function salvageFromNoStarterMessage(thread, threadDoc) {
+async function salvageFromNoStarterMessage(thread, threadDoc, submissionsForum, vetoForum, salvageTag) {
 	if(!threadDoc.videoLink) {
 		await thread.delete("FORUM SYNC: Deleted as video link could not be found.");
 		await Submission.enqueue(() => Submission.deleteOne({_id: threadDoc._id}));
+		logSyncMessage(salvageTag, `DELETED thread and doc ${thread.id}`, "Missing video link");
 		return;
 	}
 
@@ -495,10 +547,12 @@ async function salvageFromNoStarterMessage(thread, threadDoc) {
 			newThread.fetchStarterMessage({force: true}),
 			thread.delete("FORUM SYNC: Created new thread as starter message was missing and no replacement could be found.")
 		]);
-		return {thread: newThread, threadDoc: docAndStarterMessage[0], starterMessage: docAndStarterMessage[1]};
+
+		logSyncMessage(salvageTag, `DELETED THREAD ${thread.id}, CREATED thread ${newThread.id} and REDIRECTED DOC to thread ${newThread.id}`, "No conflicting thread was found and starter message needed to be supplied");
+		return {fetchedThread: newThread, threadDoc: docAndStarterMessage[0], starterMessage: docAndStarterMessage[1]};
 	}
 
-	const otherThreadForum = await client.channels.fetch(VETO_STATUSES.includes(otherThreadDoc.status) ? process.env.VETO_FORUM_ID : process.env.SUBMISSIONS_FORUM_ID);
+	const otherThreadForum = VETO_STATUSES.includes(otherThreadDoc.status) ? vetoForum : submissionsForum;
 	try { // TODO probably already have one of the forums stored
 		await otherThreadForum.threads.fetch(otherThreadDoc.threadId);
 	} catch(error) { // otherThread does not exist
@@ -509,9 +563,12 @@ async function salvageFromNoStarterMessage(thread, threadDoc) {
 			thread.delete("FORUM SYNC: Created new thread as starter message was missing, but DB doc was found.")
 		]);
 		
-		return {thread: newThread, threadDoc: docAndStarterMessage[0], starterMessage: docAndStarterMessage[1]};
+		logSyncMessage(salvageTag, `DELETED THREAD ${thread.id}, CREATED thread ${newThread.id} and REDIRECTED DOC to thread ${newThread.id}`, "No conflicting thread was found and starter message needed to be supplied");
+		return {fetchedThread: newThread, threadDoc: docAndStarterMessage[0], starterMessage: docAndStarterMessage[1]};
 	}
 	await thread.delete("FORUM SYNC: Deleted as matching thread was found.");
+
+	logSyncMessage(salvageTag, `DELETED THREAD ${thread.id}`, "Matching thread was found with a video link");
 	return;
 }
 
@@ -519,4 +576,61 @@ async function redirectSaveSubmissionDoc(submissionDoc, targetThreadId) {
 	submissionDoc.threadId = targetThreadId;
 	submissionDoc.status = "TEMP";
 	return submissionDoc.save();
+}
+
+function logSyncMessage(code, action, reason) {
+	console.log(`[${code}] // ${action}. Reason: ${reason}.`);
+}
+
+function generateIdTagMap(tags) {
+	return new Map(
+		tags.filter(tag => VETO_EMOJI_CODES.includes(tag.emoji))
+			.map(tag => [tag.id, tag])
+	);
+}
+
+async function getThreadDocAndMessage(forum, threadId) {
+	const threadDocPromise = Submission.enqueue(() => Submission.findOne({threadId: bulkThread.id}).exec());
+
+	let fetchedThread = await forum.threads.fetch(threadId, {force: true});
+	let starterMessage;
+	try { starterMessage = await fetchedThread.fetchStarterMessage({force: true});
+	} catch(ignored) {}
+
+	let threadDoc = await threadDocPromise;
+	return {fetchedThread: fetchedThread, threadDoc: threadDoc, starterMessage: starterMessage}
+}
+
+async function handleAwaitingVetoThread(fetchedThread, starterMessage, pendingTagId) {
+	const count = JUDGEMENT_EMOJI_CODES.reduce(
+		(emojiCode, total) => total + starterMessage.reactions.resolve(emojiCode)?.count ?? 0, 
+		0
+	);
+	if(count >= parseInt(process.env.VETO_THRESHOLD + 2)) {
+		return handleVetoPending(fetchedThread, pendingTagId, starterMessage);
+	}
+}
+
+function handlePendingApprovalThread(fetchedThread, threadDoc, starterMessage, pendingTagId) {
+	if(this.pendingThreadDocs.has(fetchedThread.id)) return; // Already set up
+	if(!threadDoc.expirationTime) return handleVetoPending(fetchedThread, pendingTagId, starterMessage);
+
+	const timeout = threadDoc.expirationTime - Date.now().valueOf(); // Amount of time left
+	setTimeout(() => handleVetoJudgement(client, fetchedThread.id), timeout);
+	this.pendingThreadDocs.set(fetchedThread.id, threadDoc);
+	return;
+}
+
+async function handleAwaitingDecisionThread(fetchedThread, starterMessage) {
+	const counts = JUDGEMENT_EMOJI_CODES.map(emojiCode => starterMessage.reactions.resolve(emojiCode)?.count ?? 0);
+	if(counts[0] > counts[1]) return handleSubmissionApprove(fetchedThread, starterMessage);
+	else if (counts[0] < counts[1]) return handleSubmissionReject(fetchedThread);
+}
+
+async function matchThreadDocStatus(threadDoc, appliedTagName) {
+	const threadStatus = appliedTagName.toUpperCase();
+	if(threadDoc.status === threadStatus) return;
+				
+	threadDoc.status = threadStatus;
+	return threadDoc.save();
 }

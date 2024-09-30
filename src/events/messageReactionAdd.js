@@ -49,7 +49,7 @@ async function handleVetoResponse(messageReaction, submissionThread, judge) {
 	const closedTagIds = JUDGEMENT_EMOJI_CODES.map(emojiCode => getTagByEmojiCode(forum, emojiCode).id);
 	if(submissionThread.appliedTags.some(appliedTagId => closedTagIds.includes(appliedTagId))) { 
 		messageReaction.users.remove(judge.id); // Prevents people from cheating with closedSubmissions on sync
-		try {judge.send(EmbedBuilder.generateFailEmbed("Please do **not react** to **closed** submissions!"));
+		try { await judge.send({embeds: [EmbedBuilder.generateFailEmbed("Please do **not react** to **closed** submissions!")]});
 		} catch(ignored) {} // Error thrown if attempt to DM a user with DMs off
 		return;
 	} 
