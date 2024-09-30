@@ -10,9 +10,9 @@ const pushEmbedFunctions = require("./utility/discord/messages/pushEmbedFunction
 
 client = new Client({
 	intents: [
-		GatewayIntentBits.Guilds,
-		GatewayIntentBits.GuildMessageReactions,
-		GatewayIntentBits.GuildMembers,
+		GatewayIntentBits.Guilds, // TODO delete all submissions docs that dont point anywhere
+		GatewayIntentBits.GuildMessageReactions, // TODO sync beautification
+		GatewayIntentBits.GuildMembers, // TODO Issue iwth intake sync??
 		GatewayIntentBits.GuildMessages, // TODO check blue 
 		GatewayIntentBits.MessageContent
 	], // TODO tplive not getting updated
@@ -28,12 +28,12 @@ client = new Client({
 	await mongoose.connect(process.env.MONGODB_URI);
 	console.log("Connected to Mongoose!"); // TODO SYNC APPROVING VETO THINGS FOR A REASON ?????????????????????????????????
 
-	pushEmbedFunctions();
+	pushEmbedFunctions(); 
 	loadCommands();
 	registerListeners();
 	await client.login(process.env.TOKEN);
 	await checkChannels();
-
+	
 	// const {e} = require("./commands/submissions/sync");
 	// const submissionsForum = await client.channels.fetch(process.env.SUBMISSIONS_FORUM_ID);
 	// const vetoForum = await client.channels.fetch(process.env.VETO_FORUM_ID);
