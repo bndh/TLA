@@ -51,7 +51,7 @@ async function handleMessage(message) {
 			responseTextModules[1] = "it **already exists";
 		}
 
-		const responseText = `**Did not forward** the following **video${responseTextModules[0]}** as ${responseTextModules[1]}**:\n\n` + 
+		const responseText = `Did **not forward** the following **video${responseTextModules[0]}** as ${responseTextModules[1]}**:\n\n` + 
 							 preExistingVideoLinks.reduce(
 								(accumulator, video) => accumulator + video + "\n",
 								""

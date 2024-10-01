@@ -1,5 +1,6 @@
 module.exports = (message, reactionCodes) => {
-	return reactionCodes.reduce((emojiCode, total) => {
-		total + message.reactions.resolve(emojiCode)?.count ?? 0;
+	return reactionCodes.reduce((total, emojiCode) => {
+		const reaction = message.reactions.resolve(emojiCode);
+		return total + (reaction?.count ?? 0);
 	}, 0);
 }

@@ -7,6 +7,8 @@ const mongoModels = require("./mongo/mongoModels");
 
 const getAllExports = require("./utility/files/getAllExports");
 const pushEmbedFunctions = require("./utility/discord/messages/pushEmbedFunctions");
+const tallyReactions = require("./utility/discord/reactions/tallyReactions");
+const sumReactions = require("./utility/discord/reactions/sumReactions");
 
 client = new Client({
 	intents: [
@@ -33,7 +35,11 @@ client = new Client({
 	registerListeners();
 	await client.login(process.env.TOKEN);
 	await checkChannels();
-	
+
+	// const c = await client.channels.fetch(process.env.SUBMISSIONS_FORUM_ID);
+	// const t = await c.threads.fetch("1290704430689419265");
+	// const m = await t.fetchStarterMessage();
+
 	// const {e} = require("./commands/submissions/sync");
 	// const submissionsForum = await client.channels.fetch(process.env.SUBMISSIONS_FORUM_ID);
 	// const vetoForum = await client.channels.fetch(process.env.VETO_FORUM_ID);
