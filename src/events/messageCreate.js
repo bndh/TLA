@@ -8,6 +8,7 @@ const createValidatedReactedVideoThreads = require("../utility/discord/threads/c
 const submissionLinkExists = require("../utility/submissionLinkExists");
 const createThreadAndReact = require("../utility/discord/threads/createThreadAndReact");
 const getTagByEmojiCode = require("../utility/discord/threads/getTagByEmojiCode");
+const getVideoTitle = require ("../utility/getVideoTitle");
 
 const OPEN_EMOJI_CODES = process.env.OPEN_EMOJI_CODES.split(", ");
 
@@ -62,11 +63,17 @@ async function handleMessage(message) {
 }
 
 async function handleNewThread(submissionsForum, waitingTag, videoLink) {
-	const thread = await createThreadAndReact(submissionsForum, {message: videoLink, appliedTags: [waitingTag.id]});
+	const videoTitle = await getVideoTitle(videoLink);
+	const thread = await createThreadAndReact(
+		submissionsForum, 
+		{name: videoTitle ?? "New Submission!", message: videoLink, appliedTags: [waitingTag.id]}
+	);
 
-	await Submission.enqueue(() => Submission.create({
-		threadId: thread.id,
+	const submissionCreateData = {
+		threadId: thread.id, 
 		videoLink: videoLink,
 		status: "AWAITING DECISION"
-	}));
+	};
+	if(videoTitle) submissionCreateData.videoTitle = videoTitle;
+	await Submission.enqueue(() => Submission.create(submissionCreateData));
 }

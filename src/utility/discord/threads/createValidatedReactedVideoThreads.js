@@ -13,12 +13,18 @@ module.exports = async (videoLinks, forum) => {
 		if(await submissionLinkExists(videoLink)) continue;
 	
 		const waitingTag = getTagByEmojiCode(forum, "⚖️");
-		const thread = await createThreadAndReact(forum, {message: videoLink, appliedTags: [waitingTag.id]});
+		const videoTitle = await getVideoTitle(videoLink);
+		const thread = await createThreadAndReact(
+			forum, 
+			{name: videoTitle ?? "New Submission!", message: videoLink, appliedTags: [waitingTag.id]}
+		);
 
-		Submission.enqueue(() => Submission.create({
+		const submissionCreateData = {
 			threadId: thread.id, 
-			videoLink: videoLink, 
+			videoLink: videoLink,
 			status: status
-		})); // Enqueue will ensure that this happens in order
+		};
+		if(videoTitle) submissionCreateData.videoTitle = videoTitle;
+		Submission.enqueue(() => Submission.create(submissionCreateData)); // Enqueue will ensure that this happens in order
 	}
 }
