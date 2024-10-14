@@ -130,26 +130,13 @@ async function generateAuditEmbed(client, sortedAuditees, totalAuditees) {
 		.setFooter({text: generateFooterText(totalAuditees), iconURL: "https://images.emojiterra.com/twitter/v14.0/512px/1f4c4.png"});
 }
 
+const nextButton = require("../../buttons/audit/next").data; // Must require after module.exports to avoid circular dependency issues
+const previousButton = require("../../buttons/audit/previous").data;
+const searchButton = require("../../buttons/audit/search").data;
 function generateActionRow(auditeeCount) {
-	const nextPageButton = new ButtonBuilder()
-		.setCustomId("next")
-		.setDisabled(auditeeCount <= parseInt(process.env.AUDITEES_PER_PAGE)) // Indicates that the first page is the last page
-		.setEmoji("➡️")
-		.setStyle(ButtonStyle.Secondary);
-	const previousPageButton = new ButtonBuilder()
-		.setCustomId("previous")
-		.setDisabled(true) // Always disabled on page 1
-		.setEmoji("⬅️")
-		.setStyle(ButtonStyle.Secondary);
-	
-	const searchButton = new ButtonBuilder()
-		.setCustomId("search")
-		.setLabel("Search")
-		.setEmoji("🔎")
-		.setStyle(ButtonStyle.Primary);
-
+	nextButton.setDisabled(auditeeCount <= parseInt(process.env.AUDITEES_PER_PAGE)); // Only location the button is used so fine to mutate
 	return new ActionRowBuilder()
-		.setComponents(previousPageButton, searchButton, nextPageButton);
+		.setComponents(previousButton, searchButton, nextButton);
 }
 
 function generateFooterText(totalAuditees, pageNumber = 1) {
