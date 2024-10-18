@@ -6,8 +6,11 @@ const getTagByEmojiCode = require("../threads/getTagByEmojiCode");
 
 module.exports = async (submissionChannel, submissionMessage) => {
 	const vetoForum = await submissionMessage.client.channels.fetch(process.env.VETO_FORUM_ID);
-	const newThread = (await createReactedThreadsFromVideos(getVideosFromMessage(submissionMessage), vetoForum))[0];
+	// const newThread = (await createReactedThreadsFromVideos(getVideosFromMessage(submissionMessage), vetoForum))[0];
 
+	const newThreadArray = await createReactedThreadsFromVideos(getVideosFromMessage(submissionMessage, false), vetoForum);
+	const newThread = newThreadArray[0];
+	
 	Submission.enqueue(() => Submission.updateOne({threadId: submissionChannel.id}, {threadId: newThread.id, status: "AWAITING VETO"}).exec());
 	
 	const approvedTag = getTagByEmojiCode(submissionChannel.parent, "✅");

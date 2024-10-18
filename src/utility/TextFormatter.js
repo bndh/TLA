@@ -84,6 +84,15 @@ class TextFormatter {
 		}
 		return returnText;
 	}
+
+	static listItems(textArray) {
+		let text = "";
+		for(let i = 0; i < textArray.length - 1; i++) {
+			text += textArray[i] + ", " 
+		}
+		text += textArray[textArray.length - 1] ?? "";
+		return text;
+	}
 }
 
 module.exports = TextFormatter;

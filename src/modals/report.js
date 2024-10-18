@@ -46,7 +46,6 @@ async function getNicknameOrBackup(userId, guild, backup) {
 
 async function createReportThread(reportForum, subject, category, description, displayedName, avatarUrl) {
 	const categoryTag = reportForum.availableTags.find(tag => tag.name.toLowerCase() === category);
-	console.log(category);
 	const openTag = getTagByEmojiCode(reportForum, "♻️");
 
 	await reportForum.threads.create({

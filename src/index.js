@@ -5,30 +5,29 @@ const path = require("path");
 const mongoose = require("mongoose");
 const mongoModels = require("./mongo/mongoModels");
 
-const getAllExports = require("./utility/files/getAllExports");
-const pushEmbedFunctions = require("./utility/discord/messages/pushEmbedFunctions");
-const tallyReactions = require("./utility/discord/reactions/tallyReactions");
-const sumReactions = require("./utility/discord/reactions/sumReactions");
-
-client = new Client({
-	intents: [
+const getAllExports = require("./utility/files/getAllExports"); // TODO infos disappearing
+const pushEmbedFunctions = require("./utility/discord/messages/pushEmbedFunctions"); // TODO lock closed posts
+// TODO await deferreplys, as long as await before method break, its fine, alteranativey .catch()?
+const client = new Client({ // TODO fix admin override (doesnt actually re-deny)
+	intents: [ // TODO change all statuses to upper case
 		GatewayIntentBits.Guilds, // TODO delete all submissions docs that dont point anywhere
 		GatewayIntentBits.GuildMessageReactions, // TODO sync beautification
 		GatewayIntentBits.GuildMembers, // TODO Issue iwth intake sync??
 		GatewayIntentBits.GuildMessages, // TODO check blue 
 		GatewayIntentBits.MessageContent
-	], // TODO tplive not getting updated
-	partials: [ // TODO CHECK WHY ZARY JUDGE SO MUCH ? COULD BE ISSUE WITH NOT CHECKING DUPES FOR UNREACT / REREACT
+	],
+	partials: [
 		Partials.Channel, // TODO improve judge sync efficiency
 		Partials.Message, // TODO judge self-stats
 		Partials.Reaction // TODO automatically remove / add roles for delist and register
 	] // TODO rebrand to TGA
 }); // TODO NAT overwrite veto
 // TODO let the LNs see whats going on in #submissions-2024 (read only list)
-(async () => { // TODO bug report modal
+
+(async () => {
 	mongoModels.setup(); // TODO status command
 	await mongoose.connect(process.env.MONGODB_URI);
-	console.log("Connected to Mongoose!"); // TODO SYNC APPROVING VETO THINGS FOR A REASON ?????????????????????????????????
+	console.log("Connected to Mongoose!"); 
 
 	pushEmbedFunctions(); 
 	loadCommands();
@@ -36,9 +35,16 @@ client = new Client({
 	await client.login(process.env.TOKEN);
 	await checkChannels();
 
-	// const c = await client.channels.fetch(process.env.SUBMISSIONS_FORUM_ID);
-	// const t = await c.threads.fetch("1290704430689419265");
-	// const m = await t.fetchStarterMessage();
+	//1257715283603361835
+	//1255155603106562069
+
+	// new Promise((resolve, reject) => {
+	// 	if(true === true) reject();
+	// 	resolve();
+	// }).then(v => console.log("Success"), v => reject())
+	//   .then(v => console.log("eee"))
+	//   .catch(error => console.log("e"));
+	//   return;
 
 	// const {e} = require("./commands/submissions/sync");
 	// const submissionsForum = await client.channels.fetch(process.env.SUBMISSIONS_FORUM_ID);
