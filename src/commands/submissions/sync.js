@@ -458,10 +458,18 @@ async function unifyCompetingThreads(competingThreadData, closedStatuses, syncCo
 	
 	if(closedThreadData.length !== 0) {
 		const excessDeletionPromises = new Array(openThreadData.length + closedThreadData.length - 1);
-		for(let i = 0; i < openThreadData.length; i++) excessDeletionPromises[i] = openThreadData[i].thread.delete(); // TODO Give reason
+		for(let i = 0; i < openThreadData.length; i++) {
+			const deletionMessage = generateSyncMessage(VETO_SYNC_CODE, `Deleting Thread ${keyThreadId.id}`, "Found Closed Competitor while Thread was Open");
+			excessDeletionPromises[i] = openThreadData[i].thread.delete(deletionMessage);
+			console.log(deletionMessage);
+		}
 
-		closedThreadData = closedThreadData.sort((pairA, pairB) => pairB[0].reactionTotal - pairA[0].reactionTotal);
-		for(let i = 1; i < closedThreadData.length; i++) excessDeletionPromises[openThreadData.length + i - 1] = closedThreadData[i].delete(); // TODO Give reason
+		closedThreadData = closedThreadData.sort((dataA, dataB) => dataB.reactionTotal - dataA.reactionTotal);
+		for(let i = 1; i < closedThreadData.length; i++) {
+			const deletionMessage = generateSyncMessage(VETO_SYNC_CODE, `Deleting Thread ${keyThreadId.id}`, "Found even-status Competitor with the same/more votes");
+			excessDeletionPromises[openThreadData.length + i - 1] = closedThreadData[i].thread.delete(deletionMessage);
+			console.log(deletionMessage);
+		}
 		
 		const deletedThreadData = closedThreadData.slice(1).concat(openThreadData);
 		await Promise.all([
@@ -475,7 +483,7 @@ async function unifyCompetingThreads(competingThreadData, closedStatuses, syncCo
 
 		logSyncMessage(
 			syncCode, 
-			`Deleted Threads [${TextFormatter.listItems(deletedThreadData)}] and their Docs`, 
+			`Deleted Threads [${TextFormatter.listItems(deletedThreadData.map(threadData => threadData.thread.id))}] and their Docs`, 
 			`Found ${closedThreadData[0].thread.id} as Optimal Competitor with ${closedThreadData[0].reactionTotal} votes`
 		);
 		return closedThreadData[0];
