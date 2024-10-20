@@ -71,5 +71,4 @@ async function handleNewThread(submissionsForum, waitingTag, videoLink) {
 	};
 	if(videoTitle) submissionCreateData.videoTitle = videoTitle;
 	await Submission.enqueue(() => Submission.create(submissionCreateData));
-	console.log("Created");
 }

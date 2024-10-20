@@ -12,6 +12,8 @@ const handleVetoPending = require("../utility/discord/submissionsVeto/handleVeto
 const JUDGEMENT_EMOJI_CODES = process.env.JUDGEMENT_EMOJI_CODES.split(", ");
 const OPEN_EMOJI_CODES = process.env.OPEN_EMOJI_CODES.split(", ");
 
+const VETO_THRESHOLD = parseInt(process.env.VETO_THRESHOLD);
+
 module.exports = {
 	name: Events.MessageReactionAdd,
 	async execute(messageReaction, user) { // TODO: Some kind of caching issue here
@@ -27,7 +29,7 @@ async function handleIntactReaction(messageReaction, user) {
 
 	const submissionThread = messageReaction.message.channel;
 
-	console.info(`JUDGEMENT REACTION BY ${user.id} IN ${submissionThread.id}`)
+	console.info(`Judgement Reaction by User ${user.id} in Thread ${submissionThread.id}`)
 
 	if(forum.id === process.env.SUBMISSIONS_FORUM_ID) handleSubmissionResponse(messageReaction, submissionThread, user);
 	else if(forum.id === process.env.VETO_FORUM_ID) handleVetoResponse(messageReaction, submissionThread, user);
@@ -63,14 +65,14 @@ async function handleVetoResponse(messageReaction, submissionThread, judge) {
 	if(submissionThread.appliedTags.some(appliedTagId => appliedTagId === pendingTagId)) return; // Indicates that the thread is pending, which this reaction should not affect for they close after a set amount of time
 
 	if(meetsReactionThreshold(messageReaction, messageReaction.message)) {
-		handleVetoPending(submissionThread, pendingTagId, messageReaction.message);
+		handleVetoPending(submissionThread, pendingTagId, messageReaction.message, messageReaction.message.content);
 	}
 }
 
 function meetsReactionThreshold(messageReaction, message) {
 	let count = messageReaction.count;
 
-	if(count >= +process.env.VETO_THRESHOLD + 2) return true; // + 2 to account for the bot's reactions
+	if(count >= VETO_THRESHOLD + 2) return true; // + 2 to account for the bot's reactions
 
 	const emojiCodeIndex = JUDGEMENT_EMOJI_CODES.findIndex(element => element === messageReaction.emoji.name);
 	const otherEmojiCode = JUDGEMENT_EMOJI_CODES[(emojiCodeIndex + 1) % JUDGEMENT_EMOJI_CODES.length]; // Increment to find the other judgement emoji

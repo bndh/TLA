@@ -12,7 +12,6 @@ const createReactedThreadsFromVideos = require("../../utility/discord/threads/cr
 const handleSubmissionApprove = require("../../utility/discord/submissionsVeto/handleSubmissionApprove");
 const handleSubmissionReject = require("../../utility/discord/submissionsVeto/handleSubmissionReject");
 const tallyReactions = require("../../utility/discord/reactions/tallyReactions");
-const handleVetoPending = require("../../utility/discord/submissionsVeto/handleVetoPending");
 const handleVetoJudgement = require("../../utility/discord/submissionsVeto/handleVetoJudgement");
 const submissionLinkExists = require("../../utility/submissionLinkExists");
 const youtubeIdRegex = require("../../utility/youtubeIdRegex");
@@ -25,6 +24,8 @@ const createThreadAndReact = require("../../utility/discord/threads/createThread
 const JUDGEMENT_EMOJI_CODES = process.env.JUDGEMENT_EMOJI_CODES.split(", ");
 const OPEN_EMOJI_CODES = process.env.OPEN_EMOJI_CODES.split(", ");
 const VETO_THRESHOLD = parseInt(process.env.VETO_THRESHOLD);
+
+const pendingThreads = new Set();
 
 module.exports = {
 	data: new SlashCommandBuilder()
@@ -74,7 +75,7 @@ module.exports = {
 
 		interaction.editReply("Sync complete!");
 	},
-	pendingThreads: new Map()
+	pendingThreads: pendingThreads
 };
 
 async function forumsSetupAndSync(channelManager) {
@@ -302,7 +303,7 @@ async function handleVetoSyncFinal(vetoForum) { // TODO What if a new competitor
 			$or: videoOrConditions
 		})); // Find thread docs with the same video link, hence "competing"
 
-		const threadSyncPromise = syncVetoThreads(fetchedThreadData, competingThreadDocs, vetoForum, idTagMap, statusTagMap, waitingTagId, pendingTagId, evaluationPromises);
+		const threadSyncPromise = syncVetoThreads(fetchedThreadData, competingThreadDocs, vetoForum, idTagMap, statusTagMap, pendingTagId, evaluationPromises);
 
 		checkedThreads.add(fetchedThreadData.thread.id);
 		competingThreadDocs.forEach(threadDoc => checkedThreads.add(threadDoc.threadId));
@@ -336,15 +337,16 @@ async function syncVetoThreads(
 					evaluationPromises.push(Submission.enqueue(() => Submission.deleteOne({_id: threadDoc._id})));
 					reject();
 				}
-			})
+			});
 		}
 		await Promise.all(enumerationPromises);
 		
 		competingVetoData.push(keyThreadData);
-		
+
 		competingVetoData.forEach(threadData => validateVetoStatus(threadData)); // Make sure status is accurate for unification
 		finalistVetoThreadData = await unifyCompetingThreads(competingVetoData, CLOSED_VETO_STATUSES, VETO_SYNC_CODE, keyThreadData.thread.id);
 	} else {
+		validateVetoStatus(keyThreadData);
 		finalistVetoThreadData = keyThreadData;
 	}
 	
@@ -434,7 +436,7 @@ function getVideoLink(starterMessage, threadDoc) {
 function validateVetoStatus(threadData) {
 	if(threadData.status === "AWAITING VETO") {
 		if(threadData.reactionTotal >= VETO_THRESHOLD + 2) threadData.status = "PENDING APPROVAL";
-	} else if(Date.now() <= threadData.threadDoc.expirationTime) { // Presence of expiration time implies pending approval status
+	} else if(Date.now() >= threadData.threadDoc.expirationTime) { // Presence of expiration time implies pending approval status
 		if(reactionCounts[0] >= reactionCounts[1]) threadData.status = "APPROVED";
 		else threadData.status = "VETOED";
 	} else if(threadData.status === undefined) {
@@ -446,8 +448,6 @@ function validateVetoStatus(threadData) {
 async function unifyCompetingThreads(competingThreadData, closedStatuses, syncCode, keyThreadId) { // TODO Does this work for submissions?
 	let closedThreadData, openThreadData;
 	[closedThreadData, openThreadData] = competingThreadData.reduce(([closedThreadData, openThreadData], threadData) => {
-		console.log(threadData.thread.id);
-		console.log(threadData.status);
 		if(closedStatuses.has(threadData.status)) closedThreadData.push(threadData);
 		else openThreadData.push(threadData);	
 		return [closedThreadData, openThreadData];
@@ -511,13 +511,14 @@ async function unifyCompetingThreads(competingThreadData, closedStatuses, syncCo
 	return openThreadData[0];
 }
 
+const handleVetoPending = require("../../utility/discord/submissionsVeto/handleVetoPending"); // Require down here to avoid circular dependency issues with pendingThreads
 async function evaluateVetoThreadData(threadData, vetoForum, statusTagMap, idTagMap, pendingTagId) {
 	await evaluateThreadData(threadData, vetoForum, statusTagMap, idTagMap, VETO_SYNC_CODE);
 
 	if(threadData.status === "AWAITING VETO") return threadData;
 
 	if(threadData.status === "PENDING APPROVAL" && !pendingThreads.has(threadData.thread.id)) {
-		await handleVetoPending(threadData.thread, pendingTagId, threadData.starterMessage);
+		await handleVetoPending(threadData.thread, pendingTagId, threadData.starterMessage, threadData.videoLink); // Specify video link in case the content has extras
 		return threadData;
 	}
 }
@@ -557,7 +558,7 @@ async function evaluateThreadData(threadData, forum, statusTagMap, idTagMap, syn
 	if(appliedTag.name.toUpperCase() !== threadData.status) {
 		const statusTag = statusTagMap.get(threadData.status);
 		evaluationPromises.push(new Promise(async resolve => {
-			await threadData.setAppliedTags([statusTag.id]);
+			await threadData.thread.setAppliedTags([statusTag.id]);
 			logSyncMessage(syncCode, `Set Tag to ${statusTag.name} for Thread ${threadData.thread.id}`, "Old Tag didn't match status");
 			resolve();
 		}));
