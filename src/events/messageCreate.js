@@ -31,17 +31,12 @@ async function handleMessage(message) {
 	const videoLinks = getVideosFromMessage(message);
 	
 	const preExistingVideoLinks = [];
-	const existencePromises = Array(videoLinks.length);
-	for(let i = 0; i < videoLinks.length; i++) {
-		existencePromises[i] = new Promise(async resolve => {
-			const preExisting = await submissionLinkExists(videoLinks[i]);
-			if(!preExisting) await handleNewThread(submissionsForum, waitingTag, videoLinks[i]);
-			else preExistingVideoLinks.push(videoLinks[i]);
-			resolve();
-		});
+	for(const videoLink of videoLinks) {
+		const preExisting = await submissionLinkExists(videoLink);
+		if(!preExisting) await handleNewThread(submissionsForum, waitingTag, videoLink); // Must await or messages with multiple of the same video link would not get detected
+		else preExistingVideoLinks.push(videoLink);
 	}
 	
-	await Promise.all(existencePromises);
 	if(preExistingVideoLinks.length >= 1) {
 		const responseTextModules = Array(2);
 		if(preExistingVideoLinks.length !== 1) {
@@ -76,4 +71,5 @@ async function handleNewThread(submissionsForum, waitingTag, videoLink) {
 	};
 	if(videoTitle) submissionCreateData.videoTitle = videoTitle;
 	await Submission.enqueue(() => Submission.create(submissionCreateData));
+	console.log("Created");
 }
