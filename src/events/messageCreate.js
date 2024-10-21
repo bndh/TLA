@@ -4,7 +4,6 @@ const {Events, EmbedBuilder} = require("discord.js");
 const { Submission } = require("../mongo/mongoModels").modelData;
 
 const getVideosFromMessage = require("../utility/discord/messages/getVideosFromMessage");
-const createValidatedReactedVideoThreads = require("../utility/discord/threads/createValidatedReactedVideoThreads");
 const submissionLinkExists = require("../utility/submissionLinkExists");
 const createThreadAndReact = require("../utility/discord/threads/createThreadAndReact");
 const getTagByEmojiCode = require("../utility/discord/threads/getTagByEmojiCode");

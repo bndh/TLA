@@ -25,6 +25,10 @@ const client = new Client({ // TODO fix admin override (doesnt actually re-deny)
 // TODO let the LNs see whats going on in #submissions-2024 (read only list)
 
 (async () => {
+	// const videoLink = "https://www.youtube.com/watch?v=q108VSysBJk";
+	// console.log(videoLink.replaceAll(/([\?\.])/g, "\\$1"));
+	// return
+
 	mongoModels.setup(); // TODO status command
 	await mongoose.connect(process.env.MONGODB_URI);
 	console.log("Connected to Mongoose!"); 
@@ -34,6 +38,11 @@ const client = new Client({ // TODO fix admin override (doesnt actually re-deny)
 	registerListeners();
 	await client.login(process.env.TOKEN);
 	await checkChannels();
+
+
+	// const {Submission} = require("./mongo/mongoModels").modelData;
+	// const res = await Submission.find({videoTitle: new RegExp("\w+")}).exec();
+	// console.log(res);
 
 	//1257715283603361835
 	//1255155603106562069

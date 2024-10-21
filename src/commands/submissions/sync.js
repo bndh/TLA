@@ -252,8 +252,8 @@ const CLOSED_VETO_STATUSES = new Set(["APPROVED", "VETOED"]);
 const VETO_STATUSES = ["APPROVED", "VETOED", "AWAITING VETO", "PENDING APPROVAL"];
 
 async function handleVetoSyncFinal(vetoForum) { // TODO What if a new competitor is found without a thread doc
-	const checkedThreads = new Set(); // TODO Add checked videoLinks map -> unified
-	const checkedVideoLinks = new Map();
+	const checkedThreadIds = new Set(); // TODO Add checked videoLinks map -> unified
+	const checkedVideoIdentifiers = new Map();
 	const evaluationPromises = [];
 
 	const idTagMap = generateIdTagMap(vetoForum.availableTags, VETO_EMOJI_CODES);
@@ -263,7 +263,7 @@ async function handleVetoSyncFinal(vetoForum) { // TODO What if a new competitor
 
 	const threadBulk = await getAllThreads(vetoForum);
 	for(const bulkedThread of threadBulk.values()) {
-		if(checkedThreads.has(bulkedThread.id)) {
+		if(checkedThreadIds.has(bulkedThread.id)) {
 			logSyncMessage(VETO_SYNC_CODE, `Bypassing sync on Thread ${bulkedThread.id}`, "Already synced");	
 			continue;
 		}
@@ -288,12 +288,7 @@ async function handleVetoSyncFinal(vetoForum) { // TODO What if a new competitor
 		if(!fetchedThreadData) return;
 
 		const youtubeMatch = fetchedThreadData.videoLink.match(youtubeIdRegex);
-		const linkEvaluationPromise = checkedVideoLinks.get(youtubeMatch ? youtubeMatch[1] : fetchedThreadData.videoLink);
-		if(linkEvaluationPromise) { // Need constructed threadData to proceed anyway so making this check here is OK
-			logSyncMessage(VETO_SYNC_CODE, `Awaiting Evaluation Promise for ${fetchedThreadData.thread.id}'s ${fetchedThreadData.videoLink}`);
-			await linkEvaluationPromise; // Consolidates other threadDocs, etc., so we need to wait for it before fetching competing thread docs
-			logSyncMessage(VETO_SYNC_CODE, `Proceeding sync on Thread ${fetchedThreadData.thread.id}`, `Link ${fetchedThreadData.videoLink}'s Evaluation Promise resolved`);
-		}
+		const linkIdentifier = youtubeMatch ? youtubeMatch[1] : fetchedThreadData.videoLink; // Added to checkedVideoIdentifiers later
 
 		const videoOrConditions = [{videoLink: youtubeMatch ? {$regex: youtubeMatch[1]} : fetchedThreadData.videoLink}];
 		if(fetchedThreadData.thread.name !== "New Submission!") videoOrConditions.push({videoTitle: fetchedThreadData.thread.name});
@@ -301,42 +296,102 @@ async function handleVetoSyncFinal(vetoForum) { // TODO What if a new competitor
 			threadId: {$ne: fetchedThreadData.thread.id},
 			status: {$in: VETO_STATUSES},
 			$or: videoOrConditions
-		})); // Find thread docs with the same video link, hence "competing"
+		}).exec()); // Find thread docs with the same video link, hence "competing"
 
-		const threadSyncPromise = syncVetoThreads(fetchedThreadData, competingThreadDocs, vetoForum, idTagMap, statusTagMap, pendingTagId, evaluationPromises);
+		let linkEvaluationPromise = checkedVideoIdentifiers.get(linkIdentifier); // Must declare outside promise or else may get self (set self later)
+		const threadSyncPromise = new Promise(async resolve => {
+			if(linkEvaluationPromise) { // Need constructed threadData to proceed anyway so making this check here is OK
+				logSyncMessage(VETO_SYNC_CODE, `Awaiting Evaluation Promise for Thread ${fetchedThreadData.thread.id}'s ${fetchedThreadData.videoLink}`);
+				await linkEvaluationPromise; // Consolidates other threadDocs, etc., so we need to wait for it before fetching competing thread docs
+				logSyncMessage(VETO_SYNC_CODE, `Proceeding sync on Thread ${fetchedThreadData.thread.id}`, `Link ${fetchedThreadData.videoLink}'s Evaluation Promise resolved`);
+			}
 
-		checkedThreads.add(fetchedThreadData.thread.id);
-		competingThreadDocs.forEach(threadDoc => checkedThreads.add(threadDoc.threadId));
-		checkedVideoLinks.set(fetchedThreadData.videoLink, threadSyncPromise);
+			await syncVetoThreads(fetchedThreadData, competingThreadDocs, vetoForum, idTagMap, statusTagMap, pendingTagId, evaluationPromises);
+			resolve();
+		});
+
+		checkedThreadIds.add(fetchedThreadData.thread.id);
+		competingThreadDocs.forEach(threadDoc => checkedThreadIds.add(threadDoc.threadId));
+		checkedVideoIdentifiers.set(linkIdentifier, threadSyncPromise);
+	}
+
+	const unprocessedDocs = await findUnprocessedDocs(checkedVideoIdentifiers);
+	logSyncMessage(VETO_SYNC_CODE, `Found ${unprocessedDocs.length} unprocessed Docs`);
+	for(const threadDoc of unprocessedDocs) { // TODO separate routine for no.1
+		logSyncMessage(VETO_SYNC_CODE, `Attempting sync on Doc ${threadDoc._id}`);
+		if(!threadDoc.videoLink.match(linkRegex)) {
+			logSyncMessage(VETO_SYNC_CODE, `Aborting sync on Doc ${threadDoc._id}`, "Video link was improper");
+			continue; // Will delete later as its threadId will not be added to the set
+		}; 
+	
+		const youtubeMatch = threadDoc.videoLink.match(youtubeIdRegex);
+		const linkIdentifier = youtubeMatch ? youtubeMatch[1] : threadDoc.videoLink; // Added to checkedVideoIdentifiers later
+		const linkEvaluationPromise = checkedVideoIdentifiers.get(linkIdentifier); // TODO: Not necessary for first check
+
+		const threadSyncPromise = new Promise(async resolve => {
+			if(linkEvaluationPromise) {
+				logSyncMessage(VETO_SYNC_CODE, `Awaiting Evaluation Promise for Doc ${threadDoc._id}'s ${threadDoc.videoLink}`);
+				await linkEvaluationPromise; // Consolidates other threadDocs, etc., so we need to wait for it before fetching competing thread docs
+				logSyncMessage(VETO_SYNC_CODE, `Proceeding sync on Doc ${threadDoc._id}`, `Link ${threadDoc.videoLink}'s Evaluation Promise resolved`);
+			}
+
+			const statusTag = statusTagMap.get(threadDoc.status);
+			if(!statusTag) {
+				logSyncMessage(VETO_SYNC_CODE, `Assigning Doc ${threadDoc._id}'s status to AWAITING VETO`, "Previous status was improper");
+				threadDoc.status = "AWAITING VETO"; // TODO:  Generify
+			}
+
+			const videoTitle = await getVideoTitle(threadDoc.videoLink);
+			if(videoTitle) threadDoc.videoTitle = videoTitle;
+			const thread = await vetoForum.threads.create({
+				name: videoTitle ?? "New Submission!", 
+				message: threadDoc.videoLink,
+				appliedTags: [statusTag.id ?? waitingTagId]
+			});
+			const starterMessage = await thread.fetchStarterMessage();
+			await addReactions(starterMessage);
+			logSyncMessage(VETO_SYNC_CODE, `Created Thread ${thread.id} for Doc ${threadDoc._id}, "Doc was unprocessed and could be salvaged"`);
+			checkedThreadIds.add(thread.id);
+
+			threadDoc.threadId = thread.id;
+			await Submission.enqueue(() => threadDoc.save()); // Must await before handling veto pending or accurate thread information will not be saved
+
+			if(statusTag === "PENDING APPROVAL") {
+				await handleVetoPending(thread, pendingTagId, starterMessage, threadDoc.videoLink);
+			}
+			resolve();
+		});
+		checkedVideoIdentifiers.set(linkIdentifier, threadSyncPromise);
 	}
 
 	await Promise.all(evaluationPromises);
-	await Promise.all(checkedVideoLinks.values());
-}
+	await Promise.all(checkedVideoIdentifiers.values());
 
+	await Submission.enqueue(() => Submission.deleteMany({threadId: {$nin: Array.from(checkedThreadIds)}}).exec());
+}
+// TODO pending docs keep getting expiration time updated
 async function syncVetoThreads(
-	keyThreadData, competingVetoThreadDocs,
+	keyThreadData, competingThreadDocs,
 	vetoForum, idTagMap, statusTagMap, pendingTagId,
 	evaluationPromises
 ) {
 	let finalistVetoThreadData;
-	if(competingVetoThreadDocs.length > 0) {
-		logSyncMessage(VETO_SYNC_CODE, "Found competing thread docs");
+	if(competingThreadDocs.length > 0) {
+		logSyncMessage(VETO_SYNC_CODE, `Found ${competingThreadDocs.length} Competitors for Thread ${keyThreadData.thread.id}`);
 
 		const competingVetoData = [];
-		const enumerationPromises = new Array(competingVetoThreadDocs.length);
-		for(let i = 0; i < competingVetoThreadDocs.length; i++) {
-			enumerationPromises[i] = new Promise(async (resolve, reject) => {
-				const threadDoc = competingVetoThreadDocs[i];
+		const enumerationPromises = new Array(competingThreadDocs.length);
+		for(let i = 0; i < competingThreadDocs.length; i++) {
+			enumerationPromises[i] = new Promise(async (resolve) => {
+				const threadDoc = competingThreadDocs[i];
 				try {
 					const thread = await fetchThread(vetoForum, threadDoc.threadId); // Throws, not worth evaluating the rest if it if no thread
 					const threadData = await extractDataFromThread(thread, threadDoc, idTagMap, evaluationPromises, VETO_SYNC_CODE); // Throws
 					competingVetoData.push(threadData);
-					resolve();
 				} catch(notFound) {
 					evaluationPromises.push(Submission.enqueue(() => Submission.deleteOne({_id: threadDoc._id})));
-					reject();
-				}
+				} // Technically an issue but no cleanup is necessary so reject isn't either
+				resolve();
 			});
 		}
 		await Promise.all(enumerationPromises);
@@ -357,6 +412,7 @@ async function constructThreadData(forum, threadId, threadDoc, waitingTagId, idT
 	let thread;
 	try { thread = await fetchThread(forum, threadId); } 
 	catch(notFound) {
+		if(!threadDoc) return;
 		await createThreadFromDoc(threadDoc, forum, waitingTagId, statusTagMap); // Preserve all data
 		logSyncMessage(syncCode, `Creating new Thread for Doc ${threadDoc._id}`, `Could not find ${threadId} in Forum ${forum.id}`);
 	}
@@ -505,13 +561,14 @@ async function unifyCompetingThreads(competingThreadData, closedStatuses, syncCo
 
 	logSyncMessage(
 		syncCode, 
-		`Deleted Threads [${TextFormatter.listItems(openThreadData.slice(1))}] and their Docs`, 
+		`Deleted Threads [${TextFormatter.listItems(openThreadData.slice(1).map(threadData => threadData.thread.id))}] and their Docs`, 
 		`Found ${openThreadData[0].thread.id} as Optimal Competitor with ${openThreadData[0].reactionTotal} votes`
 	);
 	return openThreadData[0];
 }
 
 const handleVetoPending = require("../../utility/discord/submissionsVeto/handleVetoPending"); // Require down here to avoid circular dependency issues with pendingThreads
+const addReactions = require("../../utility/discord/reactions/addReactions");
 async function evaluateVetoThreadData(threadData, vetoForum, statusTagMap, idTagMap, pendingTagId) {
 	await evaluateThreadData(threadData, vetoForum, statusTagMap, idTagMap, VETO_SYNC_CODE);
 
@@ -585,6 +642,20 @@ async function evaluateThreadData(threadData, forum, statusTagMap, idTagMap, syn
 
 	logSyncMessage(syncCode, `Finished evaluating Finalist ${threadData.thread.id}`);
 	return threadData;
+}
+
+async function findUnprocessedDocs(checkedVideoIdentifiers) {
+	const regices = new Array(checkedVideoIdentifiers.size);
+	let counter = 0;
+	for(const linkIdentifier of checkedVideoIdentifiers.keys()) { // An unprocessed doc will be one which does not have a thread; those that will therefore have a meaningful effect on the system state will be those with unchecked video links
+		const literalIdentifier = linkIdentifier.replaceAll(/[\\\?\.]/g, "\\$1");
+		regices[counter] = new RegExp(literalIdentifier);
+		counter++;
+	}
+
+	return await Submission.enqueue(() => Submission.find({
+		videoLink: {$nin: regices}
+	}).exec());
 }
 
 function generateIdTagMap(tags, emojiCodes) {

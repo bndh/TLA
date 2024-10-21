@@ -37,7 +37,7 @@ async function handleIntactReaction(messageReaction, user) {
 
 async function handleSubmissionResponse(messageReaction, submissionThread, judge) {
 	const judgeDoc = await Judge.enqueue(() => Judge.findOne({userId: judge.id}).exec());
-	if(!judgeDoc.counselledSubmissionIds.includes(submissionThread.id)) { // Don't add something that's already there
+	if(!judgeDoc?.counselledSubmissionIds.includes(submissionThread.id)) { // Don't add something that's already there
 		Judge.enqueue(() => Judge.updateOne({userId: judge.id}, {$push: {counselledSubmissionIds: submissionThread.id}}));
 	}
 	if(messageReaction.emoji.name === JUDGEMENT_EMOJI_CODES[0]) await handleSubmissionApprove(submissionThread, messageReaction.message);

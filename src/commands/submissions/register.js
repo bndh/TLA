@@ -67,17 +67,17 @@ async function tallyRegistreeSubmissions(forums, registreeId) {
 
 	const threadGroups = await Promise.all(forums.map(forum => getAllThreads(forum)));
 	const tallyPromises = Array(threadGroups.reduce((accumulator, threadGroup) => accumulator + threadGroup.size, 0));
-	for(const threads of threadGroups) {
-		if(threads.size === 0) continue;
-		const forum = threads.at(0).parent;
-		const closedTagIds = JUDGEMENT_EMOJI_CODES.map(emojiCode => getTagByEmojiCode(forum, emojiCode).id);
+	for(let i = 0; i < threadGroups.length; i++) {
+		if(threadGroups[i].size === 0) continue;
+		const threadGroup = threadGroups[i];
+		const closedTagIds = JUDGEMENT_EMOJI_CODES.map(emojiCode => getTagByEmojiCode(forums[i], emojiCode).id);
 
-		for(let i = 0; i < threads.size; i++) {
+		for(let j = 0; j < threadGroup.size; j++) {
 			tallyPromises[i] = new Promise(async resolve => {
-				const thread = threads.at(i);
+				const thread = threadGroup.at(j);
 				const starterMessage = await thread.fetchStarterMessage();
-	
 				const reacted = await hasReacted(starterMessage, registreeId, JUDGEMENT_EMOJI_CODES);
+
 				if(reacted) {
 					const threadClosed = closedTagIds.includes(thread.appliedTags[0]);
 					if(threadClosed) totalSubmissionsClosed++;
