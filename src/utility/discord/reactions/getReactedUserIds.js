@@ -17,3 +17,15 @@ module.exports = async (message, reactionCodes) => { // reactionCodes should be 
 
 	return users;
 };
+
+async (message, reactionCodes) => {
+	const users = new Set();
+	for(const reactionCode of reactionCodes) {
+		const reaction = message.reactions.resolve(reactionCode);
+		if(!reaction) continue;
+
+		const reactedUsers = await reaction.users.fetch();
+		reactedUsers.each(user => users.add(user.id));
+	}
+	return users;
+}

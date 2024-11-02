@@ -1,5 +1,5 @@
 require("dotenv").config();
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ThreadAutoArchiveDuration } = require("discord.js");
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ThreadAutoArchiveDuration, time, TimestampStyles } = require("discord.js");
 
 const { Judge, Submission } = require("../../mongo/mongoModels").modelData;
 
@@ -20,6 +20,8 @@ const linkRegex = require("../../utility/linkRegex");
 const getVideoTitle = require("../../utility/getVideoTitle");
 const TextFormatter = require("../../utility/TextFormatter");
 const createThreadAndReact = require("../../utility/discord/threads/createThreadAndReact");
+
+const { handleNewThread } = require("../../events/messageCreate");
 
 const JUDGEMENT_EMOJI_CODES = process.env.JUDGEMENT_EMOJI_CODES.split(", ");
 const OPEN_EMOJI_CODES = process.env.OPEN_EMOJI_CODES.split(", ");
@@ -42,6 +44,11 @@ module.exports = {
 				{name: "All", value: "all"}
 			)
 		)
+		.addBooleanOption(optionBuilder => optionBuilder
+			.setName("deep")
+			.setDescription("Whether or not to perform a deep sync. (Default: false).")
+			.setRequired(false)
+		)
 		.addIntegerOption(optionBuilder => optionBuilder
 			.setName("max-intake")
 			.setDescription("The maximum number of messages to be scanned from #submissions-intake.")
@@ -53,24 +60,49 @@ module.exports = {
 		await interaction.deferReply({ephemeral: true});
 
 		const mode = interaction.options.getString("mode", true);
+		const deep = interaction.options.getString("deep", false) ?? false;
 		const maxIntake = interaction.options.getInteger("max-intake", false) ?? process.env.MAX_INTAKE_SYNC;
 
 		console.info(`COMMAND ${this.data.name} USED BY ${interaction.user.id} IN ${interaction.channelId} WITH mode ${mode} AND maxIntake ${maxIntake}`);
 
-		const channelManager = interaction.client.channels;
+		if(deep) {
+			interaction.editReply("**Deep** sync is currently **out of service**.");
 
-		if(mode === "forums") await forumsSetupAndSync(channelManager);
-		else if(mode === "intake") await intakeSetupAndSync(channelManager);
-		else if(mode === "judges") await judgeSetupAndSync(channelManager);
-		else {
-			let promisedChannels = await Promise.all([
-				channelManager.fetch(process.env.SUBMISSIONS_INTAKE_ID),
-				channelManager.fetch(process.env.SUBMISSIONS_FORUM_ID), 
-				channelManager.fetch(process.env.VETO_FORUM_ID) // TODO BETTER CODE STRUCTURE WOULD BE PASS HTE PROMISES TO THE METHODS AND HAVE THEM AWAIT THEM INTERNALLY?
-			]);
-			await handleForumsSync(promisedChannels[1], promisedChannels[2]); // Intake happens after forum sync as it checks the DB before posting, which might not be ready if done in another order
-			await handleIntakeSync(promisedChannels[0], promisedChannels[1], maxIntake);
-			await handleJudgeSync(promisedChannels[1], promisedChannels[2]);
+			return;
+			// const channelManager = interaction.client.channels;
+
+			// if(mode === "forums") await forumsSetupAndSync(channelManager);
+			// else if(mode === "intake") await intakeSetupAndSync(channelManager);
+			// else if(mode === "judges") await judgeSetupAndSync(channelManager);
+			// else {
+			// 	let promisedChannels = await Promise.all([
+			// 		channelManager.fetch(process.env.SUBMISSIONS_INTAKE_ID),
+			// 		channelManager.fetch(process.env.SUBMISSIONS_FORUM_ID), 
+			// 		channelManager.fetch(process.env.VETO_FORUM_ID) // TODO BETTER CODE STRUCTURE WOULD BE PASS HTE PROMISES TO THE METHODS AND HAVE THEM AWAIT THEM INTERNALLY?
+			// 	]);
+			// 	await handleForumsSync(promisedChannels[1], promisedChannels[2]); // Intake happens after forum sync as it checks the DB before posting, which might not be ready if done in another order
+			// 	await handleIntakeSync(promisedChannels[0], promisedChannels[1], maxIntake);
+			// 	await handleJudgeSync(promisedChannels[1], promisedChannels[2]);
+			// }
+		} else {
+			const channelManager = interaction.client.channels;
+			if(mode === "forums") {
+				const forumChannels = await fetchChannels(channelManager, process.env.VETO_FORUM_ID, process.env.SUBMISSIONS_FORUM_ID);
+				await shallowForumSync(...forumChannels);
+			} else if(mode === "intake") {
+				const intakeChannels = await fetchChannels(channelManager, process.env.SUBMISSIONS_INTAKE_ID, process.env.SUBMISSIONS_FORUM_ID);
+				await shallowIntakeSync(...intakeChannels, maxIntake);
+			} else if(mode === "judges") {
+				const judgeChannels = await fetchChannels(channelManager, process.env.VETO_FORUM_ID, process.env.SUBMISSIONS_FORUM_ID);
+				await shallowJudgeSync(...judgeChannels);
+			} else {
+				const channels = await fetchChannels(process.env.SUBMISSIONS_INTAKE_ID, process.env.SUBMISSIONS_FORUM_ID, process.env.VETO_FORUM_ID);
+				await Promise.all([
+					shallowForumSync(channels[1], channels[2]),
+					shallowIntakeSync(channels[0], channels[1]),
+					shallowJudgeSync(channels[1], channels[2])
+				]);
+			}
 		}
 
 		interaction.editReply("Sync complete!");
@@ -78,77 +110,197 @@ module.exports = {
 	pendingThreads: pendingThreads
 };
 
-async function forumsSetupAndSync(channelManager) {
-	let promisedChannels = await Promise.all([
-		channelManager.fetch(process.env.SUBMISSIONS_FORUM_ID), 
-		channelManager.fetch(process.env.VETO_FORUM_ID)
-	]);
-	await handleForumsSync(promisedChannels[0], promisedChannels[1]);
+function fetchChannels(channelManager, ...channelIds) {
+	return Promise.all(channelIds.map(id => channelManager.fetch(id)));
 }
 
-async function handleForumsSync(submissionsForum, vetoForum) {
-	console.info("==> STARTING FORUM SYNC");
-	// const vetoThreadPromise = getAllThreads(vetoForum);
-	// const submissionsThreadPromise = getAllThreads(submissionsForum);
-	console.info("Syncing Veto...");
-	await handleVetoSyncFinal(vetoForum);
-	console.info("Syncing Submissions...");
-	// await handleSubmissionSync(submissionsForum, await submissionsThreadPromise);
-	//await handleSubmissionSync2(submissionsForum, vetoForum);
-	console.info("==> FINISHED FORUM SYNC");
+async function shallowForumSync(vetoForum, submissionsForum) {
+	await shallowVetoSync(vetoForum);
+	console.log("Completed Veto Sync");
+	await shallowSubmissionsSync(submissionsForum);
+	console.log("Completed Submissions Sync");
 }
 
-async function intakeSetupAndSync(channelManager) {
-	console.info("==> STARTING INTAKE SYNC");
-	promisedChannels = await Promise.all([
-		channelManager.fetch(process.env.SUBMISSIONS_INTAKE_ID), 
-		channelManager.fetch(process.env.SUBMISSIONS_FORUM_ID)]);
-	await handleIntakeSync(promisedChannels[0], promisedChannels[1], maxIntake); // TODO maxIntake missing?
-	console.info("==> FINISHED INTAKE SYNC");
-}
+async function shallowIntakeSync(intakeChannel, submissionsForum, maxIntake) {
+	const waitingTagId = getTagByEmojiCode(submissionsForum, OPEN_EMOJI_CODES[0]).id;
+	const messages = await fetchMessages(intakeChannel, maxIntake);
 
-async function handleIntakeSync(intakeChannel, submissionsForum, maxIntake) {
-	const initialMessages = await fetchMessages(intakeChannel, maxIntake);
-	for(const initialMessage of initialMessages) {
-		const message = await intakeChannel.messages.fetch(initialMessage.id);
-
+	for(const message of messages) { // Must do synchronously to avoid duplicate threads
 		const videoLinks = getVideosFromMessage(message);
+
+		console.log(message.channelId, message.guildId, message.id, videoLinks)
 		for(const videoLink of videoLinks) {
 			if(await submissionLinkExists(videoLink)) continue;
 
-			const thread = (await createReactedThreadsFromVideos([videoLink], submissionsForum))[0];
-			Submission.enqueue(() => Submission.create({
-				threadId: thread.id, 
-				videoLink: videoLink, 
-				status: "AWAITING DECISION"
-			}));
-			Judge.enqueue(() => Judge.updateMany({}, {$push: {unjudgedThreadIds: thread.id}}).exec());
+			await handleNewThread(submissionsForum, waitingTagId, videoLink); // Creates the thread and updates Submissions
 		}
 	}
 }
 
-async function judgeSetupAndSync(channelManager) {
-	console.info("==> STARTING JUDGE SYNC");
-	let promisedChannels = await Promise.all([
-		channelManager.fetch(process.env.SUBMISSIONS_FORUM_ID), 
-		channelManager.fetch(process.env.VETO_FORUM_ID)
+async function shallowJudgeSync(submissionsForum, vetoForum) {
+	const judgeGroups = await Promise.all(["nominator", "admin"].map(judgeType => Judge.enqueue(() => Judge.find({judgeType: {$in: judgeType}}).exec())));
+	const judgeIdMaps = judgeGroups.map(judgeGroup => new Map(judgeGroup.map(judge => [judge.userId, {counselled: [], closed: 0}])))
+
+	await Promise.all([
+		judgeSyncForum(submissionsForum, judgeIdMaps[1]), // Pushing asynchronously is safe in JS so this works fine
+		judgeSyncForum(vetoForum, ...judgeIdMaps)
 	]);
-	await handleJudgeSync(promisedChannels[0], promisedChannels[1]); 
-	console.info("==> FINISHED JUDGE SYNC");
+	
+	return Promise.all(judgeIdMaps.map(judgeIdMap => syncJudgeDocsFromMap(judgeIdMap)));
 }
 
-async function handleJudgeSync(submissionsForum, vetoForum) {
-	const judgeSyncPromises = Array(2);
-	judgeSyncPromises[0] = await updateJudges("nominator", [vetoForum]);
-	judgeSyncPromises[1] = await updateJudges("admin", [vetoForum, submissionsForum])
-	await Promise.all(judgeSyncPromises);
+async function shallowVetoSync(vetoForum) {
+	const threads = await getAllThreads(vetoForum);
+	const specialTags = getTagsFromEmojiCodes(vetoForum, [...JUDGEMENT_EMOJI_CODES, OPEN_EMOJI_CODES[1]], true).map(tag => tag.id);
+	return Promise.all([threads.map(thread => shallowSyncVetoThread(thread, ...specialTags))]);
 }
 
-const VETO_SALVAGE_CODE = "SaV";
-const SUBMISSIONS_SALVAGE_CODE = "SaS";
-const VETO_SYNC_CODE = "SyV";
-const SUBMISSIONS_SYNC_CODE = "SyS";
-const JUDGE_SYNC_CODE = "SyJ";
+const handleVetoPending = require("../../utility/discord/submissionsVeto/handleVetoPending"); // Circular dependency
+async function shallowSyncVetoThread(thread, approvedTagId, deniedTagId, pendingTagId) {
+	if(thread.appliedTags.some(tagId => tagId === approvedTagId || tagId === deniedTagId)) return;
+
+	const videoMessage = await thread.fetchStarterMessage({force: true});
+
+	if(thread.appliedTags.includes(pendingTagId)) {
+		const doc = await Submission.enqueue(() => Submission.findOne({threadId: thread.id}).exec());
+		if(doc.expirationTime <= Date.now()) return handleVetoJudgement(thread.client, thread.id);
+	} else { // Thread is not closed or pending
+		const [upvotes, downvotes] = tallyReactions(videoMessage, JUDGEMENT_EMOJI_CODES);
+		if(upvotes + downvotes >= VETO_THRESHOLD + 2) { // +2 as the bot reacts twice to any sent message
+			return handleVetoPending(thread, pendingTagId, videoMessage, videoMessage.cleanContent.trim());	
+		}
+	}
+}
+
+async function shallowSubmissionsSync(submissionsForum) {
+	const threads = await getAllThreads(submissionsForum);
+	const closedTagIds = getTagsFromEmojiCodes(submissionsForum, JUDGEMENT_EMOJI_CODES).map(tag => tag.id);
+	return Promise.all([threads.map(thread => shallowSyncSubmissionsThread(thread, closedTagIds))])
+}
+
+async function shallowSyncSubmissionsThread(thread, closedTagIds) {
+	if(thread.appliedTags.some(tagId => closedTagIds.includes(tagId))) return;
+	
+	const videoMessage = await thread.fetchStarterMessage({force: true});
+
+	const [upvotes, downvotes] = tallyReactions(videoMessage, JUDGEMENT_EMOJI_CODES);
+	if(upvotes > downvotes) { // Easiest check
+		return handleSubmissionApprove(thread, videoMessage);
+	} else if(upvotes < downvotes) {
+		return handleSubmissionReject(thread);
+	}
+}
+
+async function judgeSyncForum(forum, ...judgeIdMaps) {
+	const threads = await getAllThreads(forum);
+	const closedTagIds = getTagsFromEmojiCodes(forum, JUDGEMENT_EMOJI_CODES).map(tag => tag.id);
+	await Promise.all(threads.map(thread => pushJudgedFromThread(judgeIdMaps, thread, closedTagIds))); // Pushing asynchronously is safe in JS
+}
+
+async function pushJudgedFromThread(judgeIdMaps, thread, closedTagIds) {
+	const videoMessage = await thread.fetchStarterMessage({force: true});
+	const reactedUserIds = await getReactedUserIds(videoMessage, JUDGEMENT_EMOJI_CODES);
+	const threadClosed = thread.appliedTags.some(appliedTagId => closedTagIds.includes(appliedTagId))
+
+	for(const userId of reactedUserIds) {
+		const map = judgeIdMaps.find(idMap => idMap.get(userId)); // Must find which map the user belongs to, in this case nominator or admin
+		const judged = map?.get(userId);
+		if(!judged) continue;
+
+		if(threadClosed) judged.closed++;
+		else judged.counselled.push(thread.id);
+	}
+}
+
+async function syncJudgeDocsFromMap(judgeIdMap) {
+	return Promise.all(Array.from(
+		judgeIdMap.entries(),
+		([judgeId, {counselled, closed}]) => Judge.enqueue(() => Judge.updateOne({userId: judgeId}, {counselledSubmissionIds: counselled, totalSubmissionsClosed: closed}))
+	));
+}
+
+function getTagsFromEmojiCodes(forum, emojiCodes, ordered = false) {
+	const filteredTags = forum.availableTags.filter(tag => emojiCodes.includes(tag.emoji.name));
+	if(ordered) { // Need ordered step as availableTags order may not correspond with inputted tagNames order
+		const emojiCodeIndexMap = new Map([emojiCodes.map((name, index) => [name, index])]);
+		filteredTags.sort((nameA, nameB) => emojiCodeIndexMap.get(nameA) - emojiCodeIndexMap.get(nameB));
+	}
+	return filteredTags;
+}
+
+
+
+// async function forumsSetupAndSync(channelManager) {
+// 	let promisedChannels = await Promise.all([
+// 		channelManager.fetch(process.env.SUBMISSIONS_FORUM_ID), 
+// 		channelManager.fetch(process.env.VETO_FORUM_ID)
+// 	]);
+// 	await handleForumsSync(promisedChannels[0], promisedChannels[1]);
+// }
+
+// async function handleForumsSync(submissionsForum, vetoForum) {
+// 	console.info("==> STARTING FORUM SYNC");
+// 	// const vetoThreadPromise = getAllThreads(vetoForum);
+// 	// const submissionsThreadPromise = getAllThreads(submissionsForum);
+// 	console.info("Syncing Veto...");
+// 	await handleVetoSyncFinal(vetoForum);
+// 	console.info("Syncing Submissions...");
+// 	// await handleSubmissionSync(submissionsForum, await submissionsThreadPromise);
+// 	//await handleSubmissionSync2(submissionsForum, vetoForum);
+// 	console.info("==> FINISHED FORUM SYNC");
+// }
+
+// async function intakeSetupAndSync(channelManager) {
+// 	console.info("==> STARTING INTAKE SYNC");
+// 	promisedChannels = await Promise.all([
+// 		channelManager.fetch(process.env.SUBMISSIONS_INTAKE_ID), 
+// 		channelManager.fetch(process.env.SUBMISSIONS_FORUM_ID)]);
+// 	await handleIntakeSync(promisedChannels[0], promisedChannels[1], maxIntake); // TODO maxIntake missing?
+// 	console.info("==> FINISHED INTAKE SYNC");
+// }
+
+// async function handleIntakeSync(intakeChannel, submissionsForum, maxIntake) {
+// 	const initialMessages = await fetchMessages(intakeChannel, maxIntake);
+// 	for(const initialMessage of initialMessages) {
+// 		const message = await intakeChannel.messages.fetch(initialMessage.id);
+
+// 		const videoLinks = getVideosFromMessage(message);
+// 		for(const videoLink of videoLinks) {
+// 			if(await submissionLinkExists(videoLink)) continue;
+
+// 			const thread = (await createReactedThreadsFromVideos([videoLink], submissionsForum))[0];
+// 			Submission.enqueue(() => Submission.create({
+// 				threadId: thread.id, 
+// 				videoLink: videoLink, 
+// 				status: "AWAITING DECISION"
+// 			}));
+// 			Judge.enqueue(() => Judge.updateMany({}, {$push: {unjudgedThreadIds: thread.id}}).exec());
+// 		}
+// 	}
+// }
+
+// async function judgeSetupAndSync(channelManager) {
+// 	console.info("==> STARTING JUDGE SYNC");
+// 	let promisedChannels = await Promise.all([
+// 		channelManager.fetch(process.env.SUBMISSIONS_FORUM_ID), 
+// 		channelManager.fetch(process.env.VETO_FORUM_ID)
+// 	]);
+// 	await handleJudgeSync(promisedChannels[0], promisedChannels[1]); 
+// 	console.info("==> FINISHED JUDGE SYNC");
+// }
+
+// async function handleJudgeSync(submissionsForum, vetoForum) {
+// 	const judgeSyncPromises = Array(2);
+// 	judgeSyncPromises[0] = await updateJudges("nominator", [vetoForum]);
+// 	judgeSyncPromises[1] = await updateJudges("admin", [vetoForum, submissionsForum])
+// 	await Promise.all(judgeSyncPromises);
+// }
+
+// const VETO_SALVAGE_CODE = "SaV";
+// const SUBMISSIONS_SALVAGE_CODE = "SaS";
+// const VETO_SYNC_CODE = "SyV";
+// const SUBMISSIONS_SYNC_CODE = "SyS";
+// const JUDGE_SYNC_CODE = "SyJ";
 
 // async function e(forumJudgeTypeMap, judgeTypes) {
 // 	const judgeTypeMap = new Map( // Map(judgeTypes => Map(judgeIds => judges))
@@ -247,444 +399,586 @@ const JUDGE_SYNC_CODE = "SyJ";
 
 
 
-const VETO_EMOJI_CODES = new Set(JUDGEMENT_EMOJI_CODES.concat(OPEN_EMOJI_CODES));
-const CLOSED_VETO_STATUSES = new Set(["APPROVED", "VETOED"]);
-const VETO_STATUSES = ["APPROVED", "VETOED", "AWAITING VETO", "PENDING APPROVAL"];
+// const VETO_EMOJI_CODES = new Set(JUDGEMENT_EMOJI_CODES.concat(OPEN_EMOJI_CODES));
+// const CLOSED_VETO_STATUSES = new Set(["APPROVED", "VETOED"]);
+// const VETO_STATUSES = ["APPROVED", "VETOED", "AWAITING VETO", "PENDING APPROVAL"];
 
-async function handleVetoSyncFinal(vetoForum) { // TODO What if a new competitor is found without a thread doc
-	const checkedThreadIds = new Set(); // TODO Add checked videoLinks map -> unified
-	const checkedVideoIdentifiers = new Map();
-	const evaluationPromises = [];
-
-	const idTagMap = generateIdTagMap(vetoForum.availableTags, VETO_EMOJI_CODES);
-	const statusTagMap = generateStatusTagMap(vetoForum.availableTags, VETO_STATUSES);
-	const pendingTagId = vetoForum.availableTags.find(tag => tag.name === "Pending Approval").id;
-	const waitingTagId = vetoForum.availableTags.find(tag => tag.name === "Awaiting Veto").id;
-
-	const threadBulk = await getAllThreads(vetoForum);
-	for(const bulkedThread of threadBulk.values()) {
-		if(checkedThreadIds.has(bulkedThread.id)) {
-			logSyncMessage(VETO_SYNC_CODE, `Bypassing sync on Thread ${bulkedThread.id}`, "Already synced");	
-			continue;
-		}
-		logSyncMessage(VETO_SYNC_CODE, `Attempting sync on Thread ${bulkedThread.id}`);
-
-		let fetchedThreadDoc = await Submission.enqueue(() => Submission.findOne({threadId: bulkedThread.id}).exec()); // TODO work out
-		if(!fetchedThreadDoc) {
-			logSyncMessage(VETO_SYNC_CODE, `Creating Doc for Thread ${bulkedThread.id}`, "Did not have one previously");
-			fetchedThreadDoc = await Submission.enqueue(() => Submission.create({
-				threadId: bulkedThread.id,
-				videoLink: "TEMP",
-				status: "TEMP"
-			}));
-		}
-		const fetchedThreadData = await constructThreadData(
-			vetoForum, 
-			bulkedThread.id, fetchedThreadDoc, 
-			waitingTagId, idTagMap, statusTagMap, 
-			evaluationPromises, 
-			VETO_SYNC_CODE
-		);
-		if(!fetchedThreadData) return;
-
-		const youtubeMatch = fetchedThreadData.videoLink.match(youtubeIdRegex);
-		const linkIdentifier = youtubeMatch ? youtubeMatch[1] : fetchedThreadData.videoLink; // Added to checkedVideoIdentifiers later
-
-		const videoOrConditions = [{videoLink: youtubeMatch ? {$regex: youtubeMatch[1]} : fetchedThreadData.videoLink}];
-		if(fetchedThreadData.thread.name !== "New Submission!") videoOrConditions.push({videoTitle: fetchedThreadData.thread.name});
-		const competingThreadDocs = await Submission.enqueue(() => Submission.find({
-			threadId: {$ne: fetchedThreadData.thread.id},
-			status: {$in: VETO_STATUSES},
-			$or: videoOrConditions
-		}).exec()); // Find thread docs with the same video link, hence "competing"
-
-		let linkEvaluationPromise = checkedVideoIdentifiers.get(linkIdentifier); // Must declare outside promise or else may get self (set self later)
-		const threadSyncPromise = new Promise(async resolve => {
-			if(linkEvaluationPromise) { // Need constructed threadData to proceed anyway so making this check here is OK
-				logSyncMessage(VETO_SYNC_CODE, `Awaiting Evaluation Promise for Thread ${fetchedThreadData.thread.id}'s ${fetchedThreadData.videoLink}`);
-				await linkEvaluationPromise; // Consolidates other threadDocs, etc., so we need to wait for it before fetching competing thread docs
-				logSyncMessage(VETO_SYNC_CODE, `Proceeding sync on Thread ${fetchedThreadData.thread.id}`, `Link ${fetchedThreadData.videoLink}'s Evaluation Promise resolved`);
-			}
-
-			await syncVetoThreads(fetchedThreadData, competingThreadDocs, vetoForum, idTagMap, statusTagMap, pendingTagId, evaluationPromises);
-			resolve();
-		});
-
-		checkedThreadIds.add(fetchedThreadData.thread.id);
-		competingThreadDocs.forEach(threadDoc => checkedThreadIds.add(threadDoc.threadId));
-		checkedVideoIdentifiers.set(linkIdentifier, threadSyncPromise);
-	}
-
-	const unprocessedDocs = await findUnprocessedDocs(checkedVideoIdentifiers);
-	logSyncMessage(VETO_SYNC_CODE, `Found ${unprocessedDocs.length} unprocessed Docs`);
-	for(const threadDoc of unprocessedDocs) { // TODO separate routine for no.1
-		logSyncMessage(VETO_SYNC_CODE, `Attempting sync on Doc ${threadDoc._id}`);
-		if(!threadDoc.videoLink.match(linkRegex)) {
-			logSyncMessage(VETO_SYNC_CODE, `Aborting sync on Doc ${threadDoc._id}`, "Video link was improper");
-			continue; // Will delete later as its threadId will not be added to the set
-		}; 
+// async function handleVetoSyncSuperFinal(vetoForum) {
+// 	let threadBulk = getAllThreads(vetoForum);
 	
-		const youtubeMatch = threadDoc.videoLink.match(youtubeIdRegex);
-		const linkIdentifier = youtubeMatch ? youtubeMatch[1] : threadDoc.videoLink; // Added to checkedVideoIdentifiers later
-		const linkEvaluationPromise = checkedVideoIdentifiers.get(linkIdentifier); // TODO: Not necessary for first check
+// 	const evaluatedThreadIds = new Set(); // Every thread that has been/will be evaluated; necessary because finding one thread will fetch all competitor thread docs
+// 	const videoIdEvaluations = new Map(); // Every video that has been/will be evaluated -> Promise object representing this process; if a thread/doc without its thread/doc counterpart is found it should await its competitor's evaluation
+// 	const completionPromises = []; // Other promises that are not appropriate for videoIdEvaluations
 
-		const threadSyncPromise = new Promise(async resolve => {
-			if(linkEvaluationPromise) {
-				logSyncMessage(VETO_SYNC_CODE, `Awaiting Evaluation Promise for Doc ${threadDoc._id}'s ${threadDoc.videoLink}`);
-				await linkEvaluationPromise; // Consolidates other threadDocs, etc., so we need to wait for it before fetching competing thread docs
-				logSyncMessage(VETO_SYNC_CODE, `Proceeding sync on Doc ${threadDoc._id}`, `Link ${threadDoc.videoLink}'s Evaluation Promise resolved`);
-			}
+// 	const idTagMap = generateIdTagMap(vetoForum.availableTags, VETO_EMOJI_CODES); // thread.appliedTags() returns ids, so this map is in place to get more information out of those ids efficiently
+// 	const statusTagMap = generateStatusTagMap(vetoForum.availableTags, VETO_STATUSES); // doc.status has no default mapping to forum tags, so this map is in place to bridge that gap
+// 	const pendingTagId = vetoForum.availableTags.find(tag => tag.name === "Pending Approval").id; // Used for assigning threads as pending
+// 	const waitingTagId = vetoForum.availableTags.find(tag => tag.name === "Awaiting Veto").id; // Used for creating new threads when necessary
 
-			const statusTag = statusTagMap.get(threadDoc.status);
-			if(!statusTag) {
-				logSyncMessage(VETO_SYNC_CODE, `Assigning Doc ${threadDoc._id}'s status to AWAITING VETO`, "Previous status was improper");
-				threadDoc.status = "AWAITING VETO"; // TODO:  Generify
-			}
+// 	threadBulk = await threadBulk;
+// 	for(const bulkedThread of threadBulk.values()) {
+// 		// Check if already synced
+// 		if(evaluatedThreadIds.has(bulkedThread.id)) {
+// 			TextFormatter.logInfoMessage(VETO_SYNC_CODE, `Bypassing sync on Thread ${bulkedThread.id}`, "Already synced");
+// 			continue;
+// 		}
 
-			const videoTitle = await getVideoTitle(threadDoc.videoLink);
-			if(videoTitle) threadDoc.videoTitle = videoTitle;
-			const thread = await vetoForum.threads.create({
-				name: videoTitle ?? "New Submission!", 
-				message: threadDoc.videoLink,
-				appliedTags: [statusTag.id ?? waitingTagId]
-			});
-			const starterMessage = await thread.fetchStarterMessage();
-			await addReactions(starterMessage);
-			logSyncMessage(VETO_SYNC_CODE, `Created Thread ${thread.id} for Doc ${threadDoc._id}, "Doc was unprocessed and could be salvaged"`);
-			checkedThreadIds.add(thread.id);
+// 		// Declare sync attempt
+// 		logSyncMessage(VETO_SYNC_CODE, `Attempting sync on Thread ${bulkedThread.id}`);
 
-			threadDoc.threadId = thread.id;
-			await Submission.enqueue(() => threadDoc.save()); // Must await before handling veto pending or accurate thread information will not be saved
+// 		// Get thread and doc
+// 		let {
+// 			thread: primaryThread, doc: primaryDoc, 
+// 			starterMessage, videoLink // Components that _may_ be fetched if issues with the primaryThread/primaryDoc occur (no reason to re-fetch them)
+// 		} = await ensureGetThreadFundamentals(bulkedThread.id, vetoForum, statusTagMap, waitingTagId);
 
-			if(statusTag === "PENDING APPROVAL") {
-				await handleVetoPending(thread, pendingTagId, starterMessage, threadDoc.videoLink);
-			}
-			resolve();
-		});
-		checkedVideoIdentifiers.set(linkIdentifier, threadSyncPromise);
-	}
+// 		const videoId = (youtubeMatch = videoLink.match(youtubeIdRegex)) ? youtubeMatch[1] : undefined; // Used in videoIdEvaluation
 
-	await Promise.all(evaluationPromises);
-	await Promise.all(checkedVideoIdentifiers.values());
+// 		if(!primaryThread || !primaryDoc || !videoLink) { // Could not ensure
+// 			const deletionPromise = deleteThreadDetails(primaryThread, primaryDoc);
+// 			videoIdEvaluations.set(videoId, deletionPromise); // In both instances of incomplete threadDetails, an attempt at finding an appropriate videoLink is made, and so we do not need to search here
+// 			completionPromises.push(deletionPromise); // If we could not find a video link here, no other thread evaluation will be able to find this thread, meaning it's not a problem that we don't set it in videoIdEvaluations
 
-	await Submission.enqueue(() => Submission.deleteMany({threadId: {$nin: Array.from(checkedThreadIds)}}).exec());
-}
-// TODO pending docs keep getting expiration time updated
-async function syncVetoThreads(
-	keyThreadData, competingThreadDocs,
-	vetoForum, idTagMap, statusTagMap, pendingTagId,
-	evaluationPromises
-) {
-	let finalistVetoThreadData;
-	if(competingThreadDocs.length > 0) {
-		logSyncMessage(VETO_SYNC_CODE, `Found ${competingThreadDocs.length} Competitors for Thread ${keyThreadData.thread.id}`);
+// 			TextFormatter.logInfoMessage(VETO_SYNC_CODE, `Aborting sync on and deleting details of Thread ${bulkedThread.id}`, "Could not establish proper thread or doc information");
+// 			continue;
+// 		}
 
-		const competingVetoData = [];
-		const enumerationPromises = new Array(competingThreadDocs.length);
-		for(let i = 0; i < competingThreadDocs.length; i++) {
-			enumerationPromises[i] = new Promise(async (resolve) => {
-				const threadDoc = competingThreadDocs[i];
-				try {
-					const thread = await fetchThread(vetoForum, threadDoc.threadId); // Throws, not worth evaluating the rest if it if no thread
-					const threadData = await extractDataFromThread(thread, threadDoc, idTagMap, evaluationPromises, VETO_SYNC_CODE); // Throws
-					competingVetoData.push(threadData);
-				} catch(notFound) {
-					evaluationPromises.push(Submission.enqueue(() => Submission.deleteOne({_id: threadDoc._id})));
-				} // Technically an issue but no cleanup is necessary so reject isn't either
-				resolve();
-			});
-		}
-		await Promise.all(enumerationPromises);
+// 		// Get competitors
+// 		const videoOrConditions = [{videoLink: videoId ? {$regex: videoId} : videoLink}]; // The video Id allows us to search for more competitors than a simple video link would (using regex)
+// 		if(primaryThread.name !== "New Submission!") videoOrConditions.push({videoTitle: primaryThread.name}); // Can also match the title itself
 		
-		competingVetoData.push(keyThreadData);
+// 		const competingDocs = await Submission.enqueue(() => Submission.find({
+// 			threadId: {$ne: thread.id},
+// 			status: {$in: VETO_STATUSES},
+// 			$or: videoOrConditions
+// 		}).exec()); // Find thread docs with the same video link, hence "competing"
 
-		competingVetoData.forEach(threadData => validateVetoStatus(threadData)); // Make sure status is accurate for unification
-		finalistVetoThreadData = await unifyCompetingThreads(competingVetoData, CLOSED_VETO_STATUSES, VETO_SYNC_CODE, keyThreadData.thread.id);
-	} else {
-		validateVetoStatus(keyThreadData);
-		finalistVetoThreadData = keyThreadData;
-	}
-	
-	return evaluateVetoThreadData(finalistVetoThreadData, vetoForum, statusTagMap, idTagMap, pendingTagId);
-}
-
-async function constructThreadData(forum, threadId, threadDoc, waitingTagId, idTagMap, statusTagMap, evaluationPromises, syncCode) {
-	let thread;
-	try { thread = await fetchThread(forum, threadId); } 
-	catch(notFound) {
-		if(!threadDoc) return;
-		await createThreadFromDoc(threadDoc, forum, waitingTagId, statusTagMap); // Preserve all data
-		logSyncMessage(syncCode, `Creating new Thread for Doc ${threadDoc._id}`, `Could not find ${threadId} in Forum ${forum.id}`);
-	}
-
-	return await extractDataFromThread(thread, threadDoc, idTagMap, evaluationPromises, syncCode);
-}
-
-async function extractDataFromThread(thread, threadDoc, idTagMap, evaluationPromises, syncCode) {
-	let starterMessage, reactionCounts, reactionTotal;
-	try { 
-		({starterMessage, reactionCounts, reactionTotal} = await fetchStarterMessageAndCounts(thread)); 
-	} catch(notFound) {
-		logSyncMessage(syncCode, `Could not find Starter Message for Thread ${thread.id}`);
-		reactionCounts = []; // While it will be [1, 1]/2 total when a new starter message is created, it would be preferable to pick a thread which already has its starter message as it does not require an additional wait
-		reactionTotal = 0;
-	}; // Create new starter message later
-
-	let videoLink;
-	try { videoLink = getVideoLink(starterMessage, threadDoc); }
-	catch(noVideoLink) {
-		evaluationPromises.push([
-			thread.delete(generateSyncMessage(syncCode, "Could not find an associated video link")),
-			Submission.enqueue(() => Submission.deleteOne({threadId: thread.id}).exec())
-		]);
-		logSyncMessage(syncCode, `Deleting Thread ${thread.id}`, "Could not find an associated video link");
-		return;
-	}
-
-	let status;
-	try { status = getThreadStatus(thread, idTagMap); } 
-	catch(noTag) { status = threadDoc.status; } // Deal with undefined later
-
-	return {thread: thread, starterMessage: starterMessage, videoLink: videoLink, status: status, reactionCounts: reactionCounts, reactionTotal: reactionTotal, threadDoc: threadDoc};
-}
-
-async function fetchThread(forum, threadId) {
-	const thread = await forum.threads.fetch(threadId);
-	if(thread.parentId !== forum.id) throw new Error("Mismatched forum");
-	return thread;
-}
-
-async function createThreadFromDoc(forum, threadDoc, waitingTagId, statusTagMap) {
-	if(!threadDoc.videoLink) return;
-	const videoMatch = threadDoc.videoLink.match(linkRegex);
-	if(!videoMatch) return;
-
-	const tag = statusTagMap.get(threadDoc.status);
-	
-	return createThreadAndReact(forum, {
-		name: threadDoc.videoTitle ?? "New Submission!", 
-		message: videoMatch[1], 
-		appliedTags: [tag ? tag.id : waitingTagId], 
-		autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek
-	});
-}
-
-async function fetchStarterMessageAndCounts(thread) {
-	starterMessage = await thread.fetchStarterMessage({force: true});
-	reactionCounts = tallyReactions(starterMessage, JUDGEMENT_EMOJI_CODES);
-	reactionTotal = reactionCounts.reduce((total, count) => total + count ?? 0);
-	return {starterMessage: starterMessage, reactionCounts: reactionCounts, reactionTotal, reactionTotal};
-}
-
-function getThreadStatus(thread, idTagMap) {
-	return idTagMap.get(thread.appliedTags[0]).name.toUpperCase();
-}
-
-function getVideoLink(starterMessage, threadDoc) {
-	let videoLink = getVideosFromMessage(starterMessage, false)[0];
-	if(!videoLink) {
-		videoLink = threadDoc.videoLink.match(linkRegex)[0]; // fetchedThreadDoc.videoLink may be undefined
-		if(!videoLink) throw new Error("No video link");
-	}
-	return videoLink;
-}
-
-function validateVetoStatus(threadData) {
-	if(threadData.status === "AWAITING VETO") {
-		if(threadData.reactionTotal >= VETO_THRESHOLD + 2) threadData.status = "PENDING APPROVAL";
-	} else if(Date.now() >= threadData.threadDoc.expirationTime) { // Presence of expiration time implies pending approval status
-		if(reactionCounts[0] >= reactionCounts[1]) threadData.status = "APPROVED";
-		else threadData.status = "VETOED";
-	} else if(threadData.status === undefined) {
-		threadData.status = "AWAITING VETO";
-	}
-	return threadData;
-}
-
-async function unifyCompetingThreads(competingThreadData, closedStatuses, syncCode, keyThreadId) { // TODO Does this work for submissions?
-	let closedThreadData, openThreadData;
-	[closedThreadData, openThreadData] = competingThreadData.reduce(([closedThreadData, openThreadData], threadData) => {
-		if(closedStatuses.has(threadData.status)) closedThreadData.push(threadData);
-		else openThreadData.push(threadData);	
-		return [closedThreadData, openThreadData];
-	}, [[], []]);
-
-	logCompetitorSyncMessage(syncCode, keyThreadId, closedThreadData, "Closed");
-	logCompetitorSyncMessage(syncCode, keyThreadId, openThreadData, "Open");
-	
-	if(closedThreadData.length !== 0) {
-		const excessDeletionPromises = new Array(openThreadData.length + closedThreadData.length - 1);
-		for(let i = 0; i < openThreadData.length; i++) {
-			const deletionMessage = generateSyncMessage(VETO_SYNC_CODE, `Deleting Thread ${keyThreadId.id}`, "Found Closed Competitor while Thread was Open");
-			excessDeletionPromises[i] = openThreadData[i].thread.delete(deletionMessage);
-			console.log(deletionMessage);
-		}
-
-		closedThreadData = closedThreadData.sort((dataA, dataB) => dataB.reactionTotal - dataA.reactionTotal);
-		for(let i = 1; i < closedThreadData.length; i++) {
-			const deletionMessage = generateSyncMessage(VETO_SYNC_CODE, `Deleting Thread ${keyThreadId.id}`, "Found even-status Competitor with the same/more votes");
-			excessDeletionPromises[openThreadData.length + i - 1] = closedThreadData[i].thread.delete(deletionMessage);
-			console.log(deletionMessage);
-		}
-		
-		const deletedThreadData = closedThreadData.slice(1).concat(openThreadData);
-		await Promise.all([
-			excessDeletionPromises,
-			Submission.enqueue(() => 
-				Submission.deleteMany({_id: {
-					$in: deletedThreadData.map(threadData => threadData.threadDoc._id)
-				}}).exec()
-			)
-		]);
-
-		logSyncMessage(
-			syncCode, 
-			`Deleted Threads [${TextFormatter.listItems(deletedThreadData.map(threadData => threadData.thread.id))}] and their Docs`, 
-			`Found ${closedThreadData[0].thread.id} as Optimal Competitor with ${closedThreadData[0].reactionTotal} votes`
-		);
-		return closedThreadData[0];
-	}
-
-	openThreadData.sort((dataA, dataB) => dataB.reactionTotal - dataA.reactionTotal);
-	const excessDeletionPromises = new Array(openThreadData.length - 1);
-	for(let i = 1; i < openThreadData.length; i++) {
-		const syncMessage = generateSyncMessage(VETO_SYNC_CODE, `Deleting Thread ${keyThreadId.id}`, "Thread had less votes than Competitor");
-		excessDeletionPromises[i - 1] = openThreadData[i].thread.delete(syncMessage);
-	}
-	await Promise.all([
-		excessDeletionPromises,
-		Submission.enqueue(() => 
-			Submission.deleteMany({_id: {$in: openThreadData.slice(1).map(threadData => threadData.threadDoc._id)}})
-					  .exec()
-		)
-	]);
-
-	logSyncMessage(
-		syncCode, 
-		`Deleted Threads [${TextFormatter.listItems(openThreadData.slice(1).map(threadData => threadData.thread.id))}] and their Docs`, 
-		`Found ${openThreadData[0].thread.id} as Optimal Competitor with ${openThreadData[0].reactionTotal} votes`
-	);
-	return openThreadData[0];
-}
-
-const handleVetoPending = require("../../utility/discord/submissionsVeto/handleVetoPending"); // Require down here to avoid circular dependency issues with pendingThreads
-const addReactions = require("../../utility/discord/reactions/addReactions");
-async function evaluateVetoThreadData(threadData, vetoForum, statusTagMap, idTagMap, pendingTagId) {
-	await evaluateThreadData(threadData, vetoForum, statusTagMap, idTagMap, VETO_SYNC_CODE);
-
-	if(threadData.status === "AWAITING VETO") return threadData;
-
-	if(threadData.status === "PENDING APPROVAL" && !pendingThreads.has(threadData.thread.id)) {
-		await handleVetoPending(threadData.thread, pendingTagId, threadData.starterMessage, threadData.videoLink); // Specify video link in case the content has extras
-		return threadData;
-	}
-}
-
-async function evaluateThreadData(threadData, forum, statusTagMap, idTagMap, syncCode) { // Guaranteed to have a video link by this point so it is not checked
-	const evaluationPromises = [];
-	
-	let threadRecreated = false; // Used when checking whether the bot itself has reacted to the thread
-	if(!threadData.starterMessage) {
-		threadRecreated = true;
-		evaluationPromises.push(new Promise(async resolve => {
-			const oldThreadId = threadData.thread.id;
-
-			const [newThreads] = await Promise.all([
-				createReactedThreadsFromVideos([threadData.videoLink], forum),
-				threadData.thread.delete(generateSyncMessage(syncCode, `Created new Thread for Thread ${oldThreadId}`, `Thread ${oldThreadId} was missing starter message`))
-			]);
-			threadData.thread = newThreads[0];
-	
-			logSyncMessage(syncCode, `Created new Thread for Thread ${threadData.thread.id}`, `Thread ${oldThreadId} was missing starter message`);
-			threadData.threadDoc.threadId = threadData.thread.id;
-			resolve();
-		}));
-}
-	
-	if(threadData.thread.name === "New Submission!") evaluationPromises.push(new Promise(async resolve => {
-		const title = await getVideoTitle(threadData.videoLink);
-		if(title) {
-			await threadData.thread.setName(title);
-			logSyncMessage(syncCode, `Updated Thread Name TO ${title} for Thread ${threadData.thread.id}`, `Name was "New Submission!" and a title was found`);
-			threadData.threadDoc.videoTitle = title;
-		}
-		resolve();
-	}));
-	
-	const appliedTag = idTagMap.get(threadData.thread.appliedTags[0]);
-	if(appliedTag.name.toUpperCase() !== threadData.status) {
-		const statusTag = statusTagMap.get(threadData.status);
-		evaluationPromises.push(new Promise(async resolve => {
-			await threadData.thread.setAppliedTags([statusTag.id]);
-			logSyncMessage(syncCode, `Set Tag to ${statusTag.name} for Thread ${threadData.thread.id}`, "Old Tag didn't match status");
-			resolve();
-		}));
-	}
-
-	if(!threadRecreated) { // A recreated thread will have the bot's reactions
-		for(const emojiCode of JUDGEMENT_EMOJI_CODES) {
-			const reaction = threadData.starterMessage.reactions.resolve(emojiCode);
-			try { if(reaction.me) continue; } // If reaction does not exist this will throw
-			catch(ignored) {}
+// 		if(competingDocs.length >= 1) {
+// 			// Map docs to threads
 			
-			logSyncMessage(syncCode, `Added Reaction ${emojiCode} to Thread ${threadData.thread.id}`, "Thread was missing the Reaction");
-			evaluationPromises.push(threadData.starterMessage.react(emojiCode));
-		}	
-	}
+
+// 			// Identify prime competitor
+			
+
+// 			// Delete remnants
+			
+		
+// 		}
+// 	}
+// }
+
+// async function ensureGetThreadFundamentals(threadId, forum, statusTagMap, defaultTagId) {
+// 	// Fetch base components
+// 	let [thread, doc] = await Promise.all([
+// 		forum.threads.fetch(threadId).catch(_ => undefined),
+// 		Submission.enqueue(() => Submission.findOne({threadId: threadId}).exec())
+// 	]);
+// 	let starterMessage, videoLink; // Presence/absence of these variables may be used as flags
+
+// 	// Salvage fundamentals
+// 	if(thread && !doc) {
+// 		starterMessage = await thread.fetchStarterMessage({force: true});
+// 		if(!starterMessage) return {thread: thread}; // No purpose in creating a new doc if the thread's video link is incorrect
+		
+// 		const linkMatch = starterMessage.cleanContent.match(linkRegex);
+// 		if(!linkMatch) return {thread: thread};
+// 		videoLink = linkMatch[0];
+
+// 		doc = await Submission.enqueue(() => Submission.create({threadId: threadId, videoLink: "TEMP", status: "TEMP"}));
+// 	} else if(!thread && doc) {
+// 		const linkMatch = doc.videoLink.match(linkRegex);
+// 		if(!linkMatch) return {doc}; // No purpose in creating a new thread if the doc's video link is invalid
+
+// 		thread = await createThreadFromDoc(doc, forum, statusTagMap, defaultTagId); // doc will be redirected later on, if the specified thread is the successor
+// 		videoLink = linkMatch[0];
+// 		starterMessage = await thread.fetchStarterMessage({force: true});
+// 	} else if(thread && doc) {
+// 		let linkMatch;
+
+// 		starterMessage = await thread.fetchStarterMessage({force: true}); // Must fetch eventually so no harm fetching here
+// 		if(starterMessage) linkMatch = starterMessage.cleanContent.match(linkRegex);
+		
+// 		if(!linkMatch) linkMatch = doc.videoLink.match(linkRegex);
+		
+// 		videoLink = linkMatch ? linkMatch[0] : undefined;
+// 	}
+	
+// 	if(!starterMessage) {
+// 		thread = await createThreadFromDetails(thread, doc, videoLink, forum, statusTagMap, waitingTagId);
+// 		starterMessage = await thread.fetchStarterMessage({force: true});
+// 	}
+
+// 	// Return
+// 	return {thread: thread, doc: doc, starterMessage: starterMessage, videoLink: videoLink};
+// }
+
+// function deleteThreadDetails(thread, doc) {
+// 	const deletionPromises = []; 
+// 	if(thread) deletionPromises.push(thread.delete()); // Leave no trace
+// 	if(doc) deletionPromises.push(Submission.enqueue(() => Submission.deleteOne({_id: doc._id}).exec()));
+// 	return Promise.all([deletionPromises]);
+// }
+
+// function getVideoLink(starterMessage, doc) {
+// 	let linkMatch = starterMessage.content.match(linkRegex);
+// 	if(linkMatch) return linkMatch[0];
+
+// 	linkMatch = doc.videoLink.match(linkRegex);
+// 	if(linkMatch) return linkMatch[0];
+// }
+
+// async function createThreadFromDoc(doc, forum, statusTagMap, defaultTagId) {
+// 	if(!doc.videoLink) return;
+// 	const linkMatch = doc.videoLink.match(linkRegex);
+// 	if(!linkMatch) return;
+// 	const videoLink = linkMatch[0];
+
+// 	const tagId = (tag = statusTagMap.get(doc.status)) ? tag.id : defaultTagId;
+	
+// 	return createThreadAndReact(forum, {
+// 		name: doc.videoTitle ?? "New Submission!", 
+// 		message: videoLink, 
+// 		appliedTags: [tagId], 
+// 		autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek
+// 	});
+// }
+
+// async function createThreadFromDetails(thread, doc, videoLink, forum, statusTagMap, defaultTagId) {
+// 	const statusTag = thread.appliedTags[0] ?? statusTagMap.get(docStatus);
+// 	const statusTagId = statusTag ? statusTag.id : defaultTagId;
+
+// 	return createThreadAndReact(forum, {
+// 		name: doc.videoTitle ?? thread.name ?? "New Submission!", 
+// 		message: videoLink, 
+// 		appliedTags: [statusTagId], 
+// 		autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek
+// 	});
+// }
+
+
+
+// async function handleVetoSyncFinal(vetoForum) {
+// 	const checkedThreadIds = new Set();
+// 	const checkedVideoIds = new Map();
+// 	const evaluationPromises = [];
+
+// 	const idTagMap = generateIdTagMap(vetoForum.availableTags, VETO_EMOJI_CODES);
+// 	const statusTagMap = generateStatusTagMap(vetoForum.availableTags, VETO_STATUSES);
+// 	const pendingTagId = vetoForum.availableTags.find(tag => tag.name === "Pending Approval").id;
+// 	const waitingTagId = vetoForum.availableTags.find(tag => tag.name === "Awaiting Veto").id;
+
+// 	const threadBulk = await getAllThreads(vetoForum);
+// 	for(const bulkedThread of threadBulk.values()) {
+// 		if(checkedThreadIds.has(bulkedThread.id)) {
+// 			logSyncMessage(VETO_SYNC_CODE, `Bypassing sync on Thread ${bulkedThread.id}`, "Already synced");	
+// 			continue;
+// 		}
+// 		logSyncMessage(VETO_SYNC_CODE, `Attempting sync on Thread ${bulkedThread.id}`);
+
+// 		let fetchedThreadDoc = await Submission.enqueue(() => Submission.findOne({threadId: bulkedThread.id}).exec());
+// 		if(!fetchedThreadDoc) {
+// 			logSyncMessage(VETO_SYNC_CODE, `Creating Doc for Thread ${bulkedThread.id}`, "Did not have one previously");
+// 			fetchedThreadDoc = await Submission.enqueue(() => Submission.create({
+// 				threadId: bulkedThread.id,
+// 				videoLink: "TEMP",
+// 				status: "TEMP"
+// 			}));
+// 		}
+// 		const fetchedThreadData = await constructThreadData(
+// 			vetoForum, 
+// 			bulkedThread.id, fetchedThreadDoc, 
+// 			waitingTagId, idTagMap, statusTagMap, 
+// 			evaluationPromises, 
+// 			VETO_SYNC_CODE
+// 		);
+// 		if(!fetchedThreadData) return;
+
+// 		const youtubeMatch = fetchedThreadData.videoLink.match(youtubeIdRegex);
+// 		const linkId = youtubeMatch ? youtubeMatch[1] : fetchedThreadData.videoLink; // Added to checkedVideoIds later
+
+// 		const videoOrConditions = [{videoLink: youtubeMatch ? {$regex: youtubeMatch[1]} : fetchedThreadData.videoLink}];
+// 		if(fetchedThreadData.thread.name !== "New Submission!") videoOrConditions.push({videoTitle: fetchedThreadData.thread.name});
+// 		const competingThreadDocs = await Submission.enqueue(() => Submission.find({
+// 			threadId: {$ne: fetchedThreadData.thread.id},
+// 			status: {$in: VETO_STATUSES},
+// 			$or: videoOrConditions
+// 		}).exec()); // Find thread docs with the same video link, hence "competing"
+
+// 		let linkEvaluationPromise = checkedVideoIds.get(linkId); // Must declare outside promise or else may get self (set self later)
+// 		const threadSyncPromise = new Promise(async resolve => {
+// 			if(linkEvaluationPromise) { // Need constructed threadData to proceed anyway so making this check here is OK
+// 				logSyncMessage(VETO_SYNC_CODE, `Awaiting Evaluation Promise for Thread ${fetchedThreadData.thread.id}'s ${fetchedThreadData.videoLink}`);
+// 				await linkEvaluationPromise; // Consolidates other threadDocs, etc., so we need to wait for it before fetching competing thread docs
+// 				logSyncMessage(VETO_SYNC_CODE, `Proceeding sync on Thread ${fetchedThreadData.thread.id}`, `Link ${fetchedThreadData.videoLink}'s Evaluation Promise resolved`);
+// 			}
+
+// 			await syncVetoThreads(fetchedThreadData, competingThreadDocs, vetoForum, idTagMap, statusTagMap, pendingTagId, evaluationPromises);
+// 			resolve();
+// 		});
+
+// 		checkedThreadIds.add(fetchedThreadData.thread.id);
+// 		competingThreadDocs.forEach(threadDoc => checkedThreadIds.add(threadDoc.threadId));
+// 		checkedVideoIds.set(linkId, threadSyncPromise);
+// 	}
+
+// 	const unprocessedDocs = await findUnprocessedDocs(checkedVideoIds);
+// 	logSyncMessage(VETO_SYNC_CODE, `Found ${unprocessedDocs.length} unprocessed Docs`);
+// 	for(const threadDoc of unprocessedDocs) { // TODO separate routine for no.1
+// 		logSyncMessage(VETO_SYNC_CODE, `Attempting sync on Doc ${threadDoc._id}`);
+// 		if(!threadDoc.videoLink.match(linkRegex)) {
+// 			logSyncMessage(VETO_SYNC_CODE, `Aborting sync on Doc ${threadDoc._id}`, "Video link was improper");
+// 			continue; // Will delete later as its threadId will not be added to the set
+// 		}; 
+	
+// 		const youtubeMatch = threadDoc.videoLink.match(youtubeIdRegex);
+// 		const linkId = youtubeMatch ? youtubeMatch[1] : threadDoc.videoLink; // Added to checkedVideoIds later
+// 		const linkEvaluationPromise = checkedVideoIds.get(linkId); // TODO: Not necessary for first check
+
+// 		const threadSyncPromise = new Promise(async resolve => {
+// 			if(linkEvaluationPromise) {
+// 				logSyncMessage(VETO_SYNC_CODE, `Awaiting Evaluation Promise for Doc ${threadDoc._id}'s ${threadDoc.videoLink}`);
+// 				await linkEvaluationPromise; // Consolidates other threadDocs, etc., so we need to wait for it before fetching competing thread docs
+// 				logSyncMessage(VETO_SYNC_CODE, `Proceeding sync on Doc ${threadDoc._id}`, `Link ${threadDoc.videoLink}'s Evaluation Promise resolved`);
+// 			}
+
+// 			const statusTag = statusTagMap.get(threadDoc.status);
+// 			if(!statusTag) {
+// 				logSyncMessage(VETO_SYNC_CODE, `Assigning Doc ${threadDoc._id}'s status to AWAITING VETO`, "Previous status was improper");
+// 				threadDoc.status = "AWAITING VETO"; // TODO:  Generify
+// 			}
+
+// 			const videoTitle = await getVideoTitle(threadDoc.videoLink);
+// 			if(videoTitle) threadDoc.videoTitle = videoTitle;
+// 			const thread = await vetoForum.threads.create({
+// 				name: videoTitle ?? "New Submission!", 
+// 				message: threadDoc.videoLink,
+// 				appliedTags: [statusTag.id ?? waitingTagId]
+// 			});
+// 			const starterMessage = await thread.fetchStarterMessage();
+// 			await addReactions(starterMessage);
+// 			logSyncMessage(VETO_SYNC_CODE, `Created Thread ${thread.id} for Doc ${threadDoc._id}, "Doc was unprocessed and could be salvaged"`);
+// 			checkedThreadIds.add(thread.id);
+
+// 			threadDoc.threadId = thread.id;
+// 			await Submission.enqueue(() => threadDoc.save()); // Must await before handling veto pending or accurate thread information will not be saved
+
+// 			if(statusTag === "PENDING APPROVAL") {
+// 				await handleVetoPending(thread, pendingTagId, starterMessage, threadDoc.videoLink);
+// 			}
+// 			resolve();
+// 		});
+// 		checkedVideoIds.set(linkId, threadSyncPromise);
+// 	}
+
+// 	await Promise.all(evaluationPromises);
+// 	await Promise.all(checkedVideoIds.values());
+
+// 	await Submission.enqueue(() => Submission.deleteMany({threadId: {$nin: Array.from(checkedThreadIds)}}).exec());
+// }
+
+// async function syncVetoThreads(
+// 	keyThreadData, competingThreadDocs,
+// 	vetoForum, idTagMap, statusTagMap, pendingTagId,
+// 	evaluationPromises
+// ) {
+// 	let finalistVetoThreadData;
+// 	if(competingThreadDocs.length > 0) {
+// 		logSyncMessage(VETO_SYNC_CODE, `Found ${competingThreadDocs.length} Competitors for Thread ${keyThreadData.thread.id}`);
+
+// 		const competingVetoData = [];
+// 		const enumerationPromises = new Array(competingThreadDocs.length);
+// 		for(let i = 0; i < competingThreadDocs.length; i++) {
+// 			enumerationPromises[i] = new Promise(async (resolve) => {
+// 				const threadDoc = competingThreadDocs[i];
+// 				try {
+// 					const thread = await fetchThread(vetoForum, threadDoc.threadId); // Throws, not worth evaluating the rest if it if no thread
+// 					const threadData = await extractDataFromThread(thread, threadDoc, idTagMap, evaluationPromises, VETO_SYNC_CODE); // Throws
+// 					competingVetoData.push(threadData);
+// 				} catch(notFound) {
+// 					evaluationPromises.push(Submission.enqueue(() => Submission.deleteOne({_id: threadDoc._id})));
+// 				} // Technically an issue but no cleanup is necessary so reject isn't either
+// 				resolve();
+// 			});
+// 		}
+// 		await Promise.all(enumerationPromises);
+		
+// 		competingVetoData.push(keyThreadData);
+
+// 		competingVetoData.forEach(threadData => validateVetoStatus(threadData)); // Make sure status is accurate for unification
+// 		finalistVetoThreadData = await unifyCompetingThreads(competingVetoData, CLOSED_VETO_STATUSES, VETO_SYNC_CODE, keyThreadData.thread.id);
+// 	} else {
+// 		validateVetoStatus(keyThreadData);
+// 		finalistVetoThreadData = keyThreadData;
+// 	}
+	
+// 	return evaluateVetoThreadData(finalistVetoThreadData, vetoForum, statusTagMap, idTagMap, pendingTagId);
+// }
+
+// async function constructThreadData(forum, threadId, threadDoc, waitingTagId, idTagMap, statusTagMap, evaluationPromises, syncCode) {
+// 	let thread;
+// 	try { thread = await fetchThread(forum, threadId); } 
+// 	catch(notFound) {
+// 		if(!threadDoc) return;
+// 		await createThreadFromDoc(threadDoc, forum, waitingTagId, statusTagMap); // Preserve all data
+// 		logSyncMessage(syncCode, `Creating new Thread for Doc ${threadDoc._id}`, `Could not find ${threadId} in Forum ${forum.id}`);
+// 	}
+
+// 	return await extractDataFromThread(thread, threadDoc, idTagMap, evaluationPromises, syncCode);
+// }
+
+// async function extractDataFromThread(thread, threadDoc, idTagMap, evaluationPromises, syncCode) {
+// 	let starterMessage, reactionCounts, reactionTotal;
+// 	try { 
+// 		({starterMessage, reactionCounts, reactionTotal} = await fetchStarterMessageAndCounts(thread)); 
+// 	} catch(notFound) {
+// 		logSyncMessage(syncCode, `Could not find Starter Message for Thread ${thread.id}`);
+// 		reactionCounts = []; // While it will be [1, 1]/2 total when a new starter message is created, it would be preferable to pick a thread which already has its starter message as it does not require an additional wait
+// 		reactionTotal = 0;
+// 	}; // Create new starter message later
+
+// 	let videoLink;
+// 	try { videoLink = getVideoLink(starterMessage, threadDoc); }
+// 	catch(noVideoLink) {
+// 		evaluationPromises.push([
+// 			thread.delete(generateSyncMessage(syncCode, "Could not find an associated video link")),
+// 			Submission.enqueue(() => Submission.deleteOne({threadId: thread.id}).exec())
+// 		]);
+// 		logSyncMessage(syncCode, `Deleting Thread ${thread.id}`, "Could not find an associated video link");
+// 		return;
+// 	}
+
+// 	let status;
+// 	try { status = getThreadStatus(thread, idTagMap); } 
+// 	catch(noTag) { status = threadDoc.status; } // Deal with undefined later
+
+// 	return {thread: thread, starterMessage: starterMessage, videoLink: videoLink, status: status, reactionCounts: reactionCounts, reactionTotal: reactionTotal, threadDoc: threadDoc};
+// }
+
+// async function fetchThread(forum, threadId) {
+// 	const thread = await forum.threads.fetch(threadId);
+// 	if(thread.parentId !== forum.id) throw new Error("Mismatched forum");
+// 	return thread;
+// }
+
+
+
+// async function fetchStarterMessageAndCounts(thread) {
+// 	starterMessage = await thread.fetchStarterMessage({force: true});
+// 	reactionCounts = tallyReactions(starterMessage, JUDGEMENT_EMOJI_CODES);
+// 	reactionTotal = reactionCounts.reduce((total, count) => total + count ?? 0);
+// 	return {starterMessage: starterMessage, reactionCounts: reactionCounts, reactionTotal, reactionTotal};
+// }
+
+// function getThreadStatus(thread, idTagMap) {
+// 	return idTagMap.get(thread.appliedTags[0]).name.toUpperCase();
+// }
+
+// function getVideoLink(starterMessage, threadDoc) {
+// 	let videoLink = getVideosFromMessage(starterMessage, false)[0];
+// 	if(!videoLink) {
+// 		videoLink = threadDoc.videoLink.match(linkRegex)[0]; // fetchedThreadDoc.videoLink may be undefined
+// 		if(!videoLink) throw new Error("No video link");
+// 	}
+// 	return videoLink;
+// }
+
+// function validateVetoStatus(threadData) {
+// 	if(threadData.status === "AWAITING VETO") {
+// 		if(threadData.reactionTotal >= VETO_THRESHOLD + 2) threadData.status = "PENDING APPROVAL";
+// 	} else if(Date.now() >= threadData.threadDoc.expirationTime) { // Presence of expiration time implies pending approval status
+// 		if(reactionCounts[0] >= reactionCounts[1]) threadData.status = "APPROVED";
+// 		else threadData.status = "VETOED";
+// 	} else if(threadData.status === undefined) {
+// 		threadData.status = "AWAITING VETO";
+// 	}
+// 	return threadData;
+// }
+
+// async function unifyCompetingThreads(competingThreadData, closedStatuses, syncCode, keyThreadId) { // TODO Does this work for submissions?
+// 	let closedThreadData, openThreadData;
+// 	[closedThreadData, openThreadData] = competingThreadData.reduce(([closedThreadData, openThreadData], threadData) => {
+// 		if(closedStatuses.has(threadData.status)) closedThreadData.push(threadData);
+// 		else openThreadData.push(threadData);	
+// 		return [closedThreadData, openThreadData];
+// 	}, [[], []]);
+
+// 	logCompetitorSyncMessage(syncCode, keyThreadId, closedThreadData, "Closed");
+// 	logCompetitorSyncMessage(syncCode, keyThreadId, openThreadData, "Open");
+	
+// 	if(closedThreadData.length !== 0) {
+// 		const excessDeletionPromises = new Array(openThreadData.length + closedThreadData.length - 1);
+// 		for(let i = 0; i < openThreadData.length; i++) {
+// 			const deletionMessage = generateSyncMessage(VETO_SYNC_CODE, `Deleting Thread ${keyThreadId.id}`, "Found Closed Competitor while Thread was Open");
+// 			excessDeletionPromises[i] = openThreadData[i].thread.delete(deletionMessage);
+// 			console.log(deletionMessage);
+// 		}
+
+// 		closedThreadData = closedThreadData.sort((dataA, dataB) => dataB.reactionTotal - dataA.reactionTotal);
+// 		for(let i = 1; i < closedThreadData.length; i++) {
+// 			const deletionMessage = generateSyncMessage(VETO_SYNC_CODE, `Deleting Thread ${keyThreadId.id}`, "Found even-status Competitor with the same/more votes");
+// 			excessDeletionPromises[openThreadData.length + i - 1] = closedThreadData[i].thread.delete(deletionMessage);
+// 			console.log(deletionMessage);
+// 		}
+		
+// 		const deletedThreadData = closedThreadData.slice(1).concat(openThreadData);
+// 		await Promise.all([
+// 			excessDeletionPromises,
+// 			Submission.enqueue(() => 
+// 				Submission.deleteMany({_id: {
+// 					$in: deletedThreadData.map(threadData => threadData.threadDoc._id)
+// 				}}).exec()
+// 			)
+// 		]);
+
+// 		logSyncMessage(
+// 			syncCode, 
+// 			`Deleted Threads [${TextFormatter.listItems(deletedThreadData.map(threadData => threadData.thread.id))}] and their Docs`, 
+// 			`Found ${closedThreadData[0].thread.id} as Optimal Competitor with ${closedThreadData[0].reactionTotal} votes`
+// 		);
+// 		return closedThreadData[0];
+// 	}
+
+// 	openThreadData.sort((dataA, dataB) => dataB.reactionTotal - dataA.reactionTotal);
+// 	const excessDeletionPromises = new Array(openThreadData.length - 1);
+// 	for(let i = 1; i < openThreadData.length; i++) {
+// 		const syncMessage = generateSyncMessage(VETO_SYNC_CODE, `Deleting Thread ${keyThreadId.id}`, "Thread had less votes than Competitor");
+// 		excessDeletionPromises[i - 1] = openThreadData[i].thread.delete(syncMessage);
+// 	}
+// 	await Promise.all([
+// 		excessDeletionPromises,
+// 		Submission.enqueue(() => 
+// 			Submission.deleteMany({_id: {$in: openThreadData.slice(1).map(threadData => threadData.threadDoc._id)}})
+// 					  .exec()
+// 		)
+// 	]);
+
+// 	logSyncMessage(
+// 		syncCode, 
+// 		`Deleted Threads [${TextFormatter.listItems(openThreadData.slice(1).map(threadData => threadData.thread.id))}] and their Docs`, 
+// 		`Found ${openThreadData[0].thread.id} as Optimal Competitor with ${openThreadData[0].reactionTotal} votes`
+// 	);
+// 	return openThreadData[0];
+// }
+
+// const handleVetoPending = require("../../utility/discord/submissionsVeto/handleVetoPending"); // Require down here to avoid circular dependency issues with pendingThreads
+// const addReactions = require("../../utility/discord/reactions/addReactions");
+// async function evaluateVetoThreadData(threadData, vetoForum, statusTagMap, idTagMap, pendingTagId) {
+// 	await evaluateThreadData(threadData, vetoForum, statusTagMap, idTagMap, VETO_SYNC_CODE);
+
+// 	if(threadData.status === "PENDING APPROVAL" && !pendingThreads.has(threadData.thread.id)) {
+// 		if(threadData.threadDoc.expirationTime) {
+// 			const expirationDate = new Date(threadData.threadDoc.expirationTime);
+// 			threadData.starterMessage.edit(`‼️ **Last Chance!** Pending Status expires ${time(expirationDate, TimestampStyles.RelativeTime)}...\n\n${threadData.videoLink}`);
+// 			setTimeout(
+// 				() => handleVetoJudgement(threadData.thread.client, threadData.thread.id), 
+// 				threadData.threadDoc.expirationTime - Date.now()
+// 			);
+// 			pendingThreads.add(threadData.thread.id);
+// 		} else { // TODO maybe evaluationpromises
+// 			await handleVetoPending(threadData.thread, pendingTagId, threadData.starterMessage, threadData.videoLink); // Specify video link in case the content has extras
+// 		}
+// 	}
+// }
+
+// async function evaluateThreadData(threadData, forum, statusTagMap, idTagMap, syncCode) { // Guaranteed to have a video link by this point so it is not checked
+// 	const evaluationPromises = [];
+	
+// 	let threadRecreated = false; // Used when checking whether the bot itself has reacted to the thread
+// 	if(!threadData.starterMessage) {
+// 		threadRecreated = true;
+// 		evaluationPromises.push(new Promise(async resolve => {
+// 			const oldThreadId = threadData.thread.id;
+
+// 			const [newThreads] = await Promise.all([
+// 				createReactedThreadsFromVideos([threadData.videoLink], forum),
+// 				threadData.thread.delete(generateSyncMessage(syncCode, `Created new Thread for Thread ${oldThreadId}`, `Thread ${oldThreadId} was missing starter message`))
+// 			]);
+// 			threadData.thread = newThreads[0];
+	
+// 			logSyncMessage(syncCode, `Created new Thread for Thread ${threadData.thread.id}`, `Thread ${oldThreadId} was missing starter message`);
+// 			threadData.threadDoc.threadId = threadData.thread.id;
+// 			resolve();
+// 		}));
+// }
+	
+// 	if(threadData.thread.name === "New Submission!") evaluationPromises.push(new Promise(async resolve => {
+// 		const title = await getVideoTitle(threadData.videoLink);
+// 		if(title) {
+// 			await threadData.thread.setName(title);
+// 			logSyncMessage(syncCode, `Updated Thread Name TO ${title} for Thread ${threadData.thread.id}`, `Name was "New Submission!" and a title was found`);
+// 			threadData.threadDoc.videoTitle = title;
+// 		}
+// 		resolve();
+// 	}));
+	
+// 	const appliedTag = idTagMap.get(threadData.thread.appliedTags[0]);
+// 	if(appliedTag.name.toUpperCase() !== threadData.status) {
+// 		const statusTag = statusTagMap.get(threadData.status);
+// 		evaluationPromises.push(new Promise(async resolve => {
+// 			await threadData.thread.setAppliedTags([statusTag.id]);
+// 			logSyncMessage(syncCode, `Set Tag to ${statusTag.name} for Thread ${threadData.thread.id}`, "Old Tag didn't match status");
+// 			resolve();
+// 		}));
+// 	}
+
+// 	if(!threadRecreated) { // A recreated thread will have the bot's reactions
+// 		for(const emojiCode of JUDGEMENT_EMOJI_CODES) {
+// 			const reaction = threadData.starterMessage.reactions.resolve(emojiCode);
+// 			try { if(reaction.me) continue; } // If reaction does not exist this will throw
+// 			catch(ignored) {}
+			
+// 			logSyncMessage(syncCode, `Added Reaction ${emojiCode} to Thread ${threadData.thread.id}`, "Thread was missing the Reaction");
+// 			evaluationPromises.push(threadData.starterMessage.react(emojiCode));
+// 		}	
+// 	}
 	
 
-	threadData.threadDoc.videoLink = threadData.videoLink;
-	threadData.threadDoc.status = threadData.status;
-	if(threadData.thread.name !== "New Submission!") threadData.threadDoc.videoTitle = threadData.thread.name;
+// 	threadData.threadDoc.videoLink = threadData.videoLink;
+// 	threadData.threadDoc.status = threadData.status;
+// 	if(threadData.thread.name !== "New Submission!") threadData.threadDoc.videoTitle = threadData.thread.name;
 
-	await Promise.all(evaluationPromises);
-	await Submission.enqueue(() => threadData.threadDoc.save());
+// 	await Promise.all(evaluationPromises);
+// 	await Submission.enqueue(() => threadData.threadDoc.save());
 
-	logSyncMessage(syncCode, `Finished evaluating Finalist ${threadData.thread.id}`);
-	return threadData;
-}
+// 	logSyncMessage(syncCode, `Finished evaluating Finalist ${threadData.thread.id}`);
+// 	return threadData;
+// }
 
-async function findUnprocessedDocs(checkedVideoIdentifiers) {
-	const regices = new Array(checkedVideoIdentifiers.size);
-	let counter = 0;
-	for(const linkIdentifier of checkedVideoIdentifiers.keys()) { // An unprocessed doc will be one which does not have a thread; those that will therefore have a meaningful effect on the system state will be those with unchecked video links
-		const literalIdentifier = linkIdentifier.replaceAll(/[\\\?\.]/g, "\\$1");
-		regices[counter] = new RegExp(literalIdentifier);
-		counter++;
-	}
+// async function findUnprocessedDocs(checkedVideoIds) {
+// 	const regices = new Array(checkedVideoIds.size);
+// 	let counter = 0;
+// 	for(const linkId of checkedVideoIds.keys()) { // An unprocessed doc will be one which does not have a thread; those that will therefore have a meaningful effect on the system state will be those with unchecked video links
+// 		const literalId = linkId.replaceAll(/[\\\?\.]/g, "\\$1");
+// 		regices[counter] = new RegExp(literalId);
+// 		counter++;
+// 	}
 
-	return await Submission.enqueue(() => Submission.find({
-		videoLink: {$nin: regices}
-	}).exec());
-}
+// 	return await Submission.enqueue(() => Submission.find({
+// 		videoLink: {$nin: regices}
+// 	}).exec());
+// }
 
-function generateIdTagMap(tags, emojiCodes) {
-	return new Map(
-		tags.filter(tag => emojiCodes.has(tag.emoji.name))
-			.map(tag => [tag.id, tag])
-	);
-}
+// function generateIdTagMap(tags, emojiCodes) {
+// 	return new Map(
+// 		tags.filter(tag => emojiCodes.has(tag.emoji.name))
+// 			.map(tag => [tag.id, tag])
+// 	);
+// }
 
-function generateStatusTagMap(tags, statuses) {
-	return new Map(
-		tags.filter(tag => statuses.includes(tag.name.toUpperCase()))
-			.map(tag => [tag.name.toUpperCase(), tag])
-	);
-}
+// function generateStatusTagMap(tags, statuses) {
+// 	return new Map(
+// 		tags.filter(tag => statuses.includes(tag.name.toUpperCase()))
+// 			.map(tag => [tag.name.toUpperCase(), tag])
+// 	);
+// }
 
-function generateSyncMessage(code, action, reason) {
-	return `[${code}] | ${action}.` + (reason ? ` Reason: ${reason}.` : "");
-}
 
-function logSyncMessage(code, action, reason) {
-	console.log(generateSyncMessage(code, action, reason));
-}
 
-function logCompetitorSyncMessage(syncCode, keyThreadId, threadData, typeDescriptor) {
-	const ids = threadData.map(threadData => threadData.thread.id);
-	const listedIds = TextFormatter.listItems(ids);
-	logSyncMessage(syncCode, `Found ${threadData.length} [${listedIds}] ${typeDescriptor} Competitor Threads for Thread ${keyThreadId} (including self)`);
-}
+// function logCompetitorSyncMessage(syncCode, keyThreadId, threadData, typeDescriptor) {
+// 	const ids = threadData.map(threadData => threadData.thread.id);
+// 	const listedIds = TextFormatter.listItems(ids);
+// 	logSyncMessage(syncCode, `Found ${threadData.length} [${listedIds}] ${typeDescriptor} Competitor Threads for Thread ${keyThreadId} (including self)`);
+// }
 
 
 

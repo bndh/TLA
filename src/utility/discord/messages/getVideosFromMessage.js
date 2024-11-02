@@ -10,7 +10,7 @@ module.exports = (message, includeAttachments = true) => {
 	}
 
 	message?.cleanContent
-		.match(linkRegex) // Match all includes capturing groups which we don't care about at the moment
+		.match(new RegExp(linkRegex.source, "g")) // Match all includes capturing groups which we don't care about at the moment
 		?.forEach(match => videoLinks.push(match));
 
 	return videoLinks;

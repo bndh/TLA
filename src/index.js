@@ -7,6 +7,8 @@ const mongoModels = require("./mongo/mongoModels");
 
 const getAllExports = require("./utility/files/getAllExports"); // TODO infos disappearing
 const pushEmbedFunctions = require("./utility/discord/messages/pushEmbedFunctions"); // TODO lock closed posts
+const linkRegex = require("./utility/linkRegex");
+const youtubeIdRegex = require("./utility/youtubeIdRegex");
 // TODO await deferreplys, as long as await before method break, its fine, alteranativey .catch()?
 const client = new Client({ // TODO fix admin override (doesnt actually re-deny)
 	intents: [ // TODO change all statuses to upper case
@@ -23,11 +25,9 @@ const client = new Client({ // TODO fix admin override (doesnt actually re-deny)
 	] // TODO rebrand to TGA
 }); // TODO NAT overwrite veto
 // TODO let the LNs see whats going on in #submissions-2024 (read only list)
-
+// TODO veto pendings with same votes get vetoed instead of approved
 (async () => {
-	// const videoLink = "https://www.youtube.com/watch?v=q108VSysBJk";
-	// console.log(videoLink.replaceAll(/([\?\.])/g, "\\$1"));
-	// return
+	console.log(Date.now());
 
 	mongoModels.setup(); // TODO status command
 	await mongoose.connect(process.env.MONGODB_URI);
@@ -38,28 +38,6 @@ const client = new Client({ // TODO fix admin override (doesnt actually re-deny)
 	registerListeners();
 	await client.login(process.env.TOKEN);
 	await checkChannels();
-
-
-	// const {Submission} = require("./mongo/mongoModels").modelData;
-	// const res = await Submission.find({videoTitle: new RegExp("\w+")}).exec();
-	// console.log(res);
-
-	//1257715283603361835
-	//1255155603106562069
-
-	// new Promise((resolve, reject) => {
-	// 	if(true === true) reject();
-	// 	resolve();
-	// }).then(v => console.log("Success"), v => reject())
-	//   .then(v => console.log("eee"))
-	//   .catch(error => console.log("e"));
-	//   return;
-
-	// const {e} = require("./commands/submissions/sync");
-	// const submissionsForum = await client.channels.fetch(process.env.SUBMISSIONS_FORUM_ID);
-	// const vetoForum = await client.channels.fetch(process.env.VETO_FORUM_ID);
-	// const forumMap = new Map([[submissionsForum, ["admin"]], [vetoForum, ["admin", "nominator"]]]);
-	// e(forumMap, ["admin", "nominator"]);
 })();
 
 function loadCommands() {

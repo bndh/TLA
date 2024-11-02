@@ -18,21 +18,22 @@ module.exports = {
 
 		if(message.partial) message.fetch().then(message => handleMessage(message));
 		else handleMessage(message);
-	}
+	},
+	handleNewThread
 };
 
 async function handleMessage(message) {
 	if(message.channelId !== process.env.SUBMISSIONS_INTAKE_ID) return;
 
 	const submissionsForum = await message.client.channels.fetch(process.env.SUBMISSIONS_FORUM_ID);
-	const waitingTag = getTagByEmojiCode(submissionsForum, OPEN_EMOJI_CODES[0]);
+	const waitingTagId = getTagByEmojiCode(submissionsForum, OPEN_EMOJI_CODES[0]).id;
 
 	const videoLinks = getVideosFromMessage(message);
 	
 	const preExistingVideoLinks = [];
 	for(const videoLink of videoLinks) {
 		const preExisting = await submissionLinkExists(videoLink);
-		if(!preExisting) await handleNewThread(submissionsForum, waitingTag, videoLink); // Must await or messages with multiple of the same video link would not get detected
+		if(!preExisting) await handleNewThread(submissionsForum, waitingTagId, videoLink); // Must await or messages with multiple of the same video link would not get detected
 		else preExistingVideoLinks.push(videoLink);
 	}
 	
@@ -56,11 +57,11 @@ async function handleMessage(message) {
 	}
 }
 
-async function handleNewThread(submissionsForum, waitingTag, videoLink) {
+async function handleNewThread(submissionsForum, waitingTagId, videoLink) {
 	const videoTitle = await getVideoTitle(videoLink);
 	const thread = await createThreadAndReact(
 		submissionsForum, 
-		{name: videoTitle ?? "New Submission!", message: videoLink, appliedTags: [waitingTag.id]}
+		{name: videoTitle ?? "New Submission!", message: videoLink, appliedTags: [waitingTagId]}
 	);
 
 	const submissionCreateData = {
@@ -69,5 +70,5 @@ async function handleNewThread(submissionsForum, waitingTag, videoLink) {
 		status: "AWAITING DECISION"
 	};
 	if(videoTitle) submissionCreateData.videoTitle = videoTitle;
-	await Submission.enqueue(() => Submission.create(submissionCreateData));
+	return Submission.enqueue(() => Submission.create(submissionCreateData));
 }

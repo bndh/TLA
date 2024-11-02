@@ -1,6 +1,14 @@
 const Coloriser = require("./Coloriser");
 
 class TextFormatter {
+	static generateInfoMessage(code, action, reason) {
+		return `[${code}] | ${action}.` + (reason ? ` Reason: ${reason}.` : "");
+	}
+	
+	static logInfoMessage(code, action, reason) {
+		console.log(generateSyncMessage(code, action, reason));
+	}
+
 	static resizeFront(text, targetLength, fillerReplacement = " ", excessReplacement = "") {
 		if(text.length < targetLength) return text.padStart(targetLength, fillerReplacement);
 		if(text.length > targetLength) return this.decapitate(text, targetLength, excessReplacement);
