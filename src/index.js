@@ -9,6 +9,8 @@ const getAllExports = require("./utility/files/getAllExports"); // TODO infos di
 const pushEmbedFunctions = require("./utility/discord/messages/pushEmbedFunctions"); // TODO lock closed posts
 const linkRegex = require("./utility/linkRegex");
 const youtubeIdRegex = require("./utility/youtubeIdRegex");
+const TextFormatter = require("./utility/TextFormatter");
+const sendIndefiniteTyping = require("./utility/discord/messages/sendIndefiniteTyping");
 // TODO await deferreplys, as long as await before method break, its fine, alteranativey .catch()?
 const client = new Client({ // TODO fix admin override (doesnt actually re-deny)
 	intents: [ // TODO change all statuses to upper case
@@ -27,8 +29,6 @@ const client = new Client({ // TODO fix admin override (doesnt actually re-deny)
 // TODO let the LNs see whats going on in #submissions-2024 (read only list)
 // TODO veto pendings with same votes get vetoed instead of approved
 (async () => {
-	console.log(Date.now());
-
 	mongoModels.setup(); // TODO status command
 	await mongoose.connect(process.env.MONGODB_URI);
 	console.log("Connected to Mongoose!"); 

@@ -101,6 +101,24 @@ class TextFormatter {
 		text += textArray[textArray.length - 1] ?? "";
 		return text;
 	}
+
+	static capitaliseText(text) {
+		let capitalisedText = "";
+
+		const matches = text.matchAll(/ ([a-z])|(^[a-z])/gd); // Matches start of the string beginning with a-z or a-z after a space. d flag provides index information for capturing groups
+		
+		let lastIndex = 0;
+		for(const match of matches) {
+			const indexToCapitalise = (match.indices[1] ?? match.indices[2])[0];
+			const capitalChar = text.charAt(indexToCapitalise).toUpperCase();
+			capitalisedText += text.slice(lastIndex, indexToCapitalise) + capitalChar; 
+			
+			lastIndex = indexToCapitalise + 1;
+		}
+		capitalisedText += text.slice(lastIndex);
+
+		return capitalisedText;
+	}
 }
 
 module.exports = TextFormatter;

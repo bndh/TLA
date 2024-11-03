@@ -1,5 +1,5 @@
 require("dotenv").config();
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ThreadAutoArchiveDuration, time, TimestampStyles } = require("discord.js");
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ThreadAutoArchiveDuration, time, TimestampStyles, channelMention } = require("discord.js");
 
 const { Judge, Submission } = require("../../mongo/mongoModels").modelData;
 
@@ -56,69 +56,110 @@ module.exports = {
 			.setMinValue(0)
 		)
 		.setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-	async execute(interaction) { // TODO fix reply (longer than 15 mins to reply :( ))
-		await interaction.deferReply({ephemeral: true});
-
+	async execute(interaction) { 
+		// Get options
 		const mode = interaction.options.getString("mode", true);
 		const deep = interaction.options.getString("deep", false) ?? false;
 		const maxIntake = interaction.options.getInteger("max-intake", false) ?? process.env.MAX_INTAKE_SYNC;
 
-		console.info(`COMMAND ${this.data.name} USED BY ${interaction.user.id} IN ${interaction.channelId} WITH mode ${mode} AND maxIntake ${maxIntake}`);
+		// Notify console
+		console.info(`Sync started by User ${interaction.user.id} in Channel ${interaction.channelId} with Mode ${mode} and maxIntake ${maxIntake}`);
 
-		if(deep) {
-			interaction.editReply("**Deep** sync is currently **out of service**.");
+		// Send initation text and get initation time/typing flag
+		const capitalMode = TextFormatter.capitaliseText(mode);
+		await interaction.reply({
+			embeds: [
+				EmbedBuilder.generateNeutralEmbed(`Starting **${capitalMode}** sync!\nPlease be patient; this may **take a while**...`)
+						  .setFooter({text: "Note: Do not re-use this command until the notified of its completion", iconURL: "https://images.emojiterra.com/twitter/v14.0/512px/1f4c4.png"})
+			],
+			ephemeral: true
+		});
+		const typingFlag = sendIndefiniteTyping(interaction.channel);
+		const then = Date.now(); // Used in the concluding response to check how long the sync took
 
-			return;
-			// const channelManager = interaction.client.channels;
-
-			// if(mode === "forums") await forumsSetupAndSync(channelManager);
-			// else if(mode === "intake") await intakeSetupAndSync(channelManager);
-			// else if(mode === "judges") await judgeSetupAndSync(channelManager);
-			// else {
-			// 	let promisedChannels = await Promise.all([
-			// 		channelManager.fetch(process.env.SUBMISSIONS_INTAKE_ID),
-			// 		channelManager.fetch(process.env.SUBMISSIONS_FORUM_ID), 
-			// 		channelManager.fetch(process.env.VETO_FORUM_ID) // TODO BETTER CODE STRUCTURE WOULD BE PASS HTE PROMISES TO THE METHODS AND HAVE THEM AWAIT THEM INTERNALLY?
-			// 	]);
-			// 	await handleForumsSync(promisedChannels[1], promisedChannels[2]); // Intake happens after forum sync as it checks the DB before posting, which might not be ready if done in another order
-			// 	await handleIntakeSync(promisedChannels[0], promisedChannels[1], maxIntake);
-			// 	await handleJudgeSync(promisedChannels[1], promisedChannels[2]);
-			// }
-		} else {
+		// Process operation
+		if(!deep) {
+			// Fetch and lock appropriate channels
 			const channelManager = interaction.client.channels;
-			if(mode === "forums") {
-				const forumChannels = await fetchChannels(channelManager, process.env.VETO_FORUM_ID, process.env.SUBMISSIONS_FORUM_ID);
-				await shallowForumSync(...forumChannels);
-			} else if(mode === "intake") {
-				const intakeChannels = await fetchChannels(channelManager, process.env.SUBMISSIONS_INTAKE_ID, process.env.SUBMISSIONS_FORUM_ID);
-				await shallowIntakeSync(...intakeChannels, maxIntake);
-			} else if(mode === "judges") {
-				const judgeChannels = await fetchChannels(channelManager, process.env.VETO_FORUM_ID, process.env.SUBMISSIONS_FORUM_ID);
-				await shallowJudgeSync(...judgeChannels);
-			} else {
-				const channels = await fetchChannels(process.env.SUBMISSIONS_INTAKE_ID, process.env.SUBMISSIONS_FORUM_ID, process.env.VETO_FORUM_ID);
-				await Promise.all([
-					shallowForumSync(channels[1], channels[2]),
-					shallowIntakeSync(channels[0], channels[1]),
-					shallowJudgeSync(channels[1], channels[2])
-				]);
-			}
+			const [submissionsIntake, syncForums] = await Promise.all([
+				channelManager.fetch(process.env.SUBMISSIONS_INTAKE_ID).then(channel => enableSyncLock(channel, {SendMessages: false})),
+				fetchAndLockSyncForums(channelManager) // Sets add reactions to false for all users
+			]);
+			const [submissionsForum, vetoForum] = syncForums;
+
+			// Process channels
+			if(mode === "forums") await shallowForumSync(vetoForum, submissionsForum);
+			else if(mode === "intake") await shallowIntakeSync(submissionsIntake, submissionsForum, maxIntake);
+			else if(mode === "judges") await shallowJudgeSync(submissionsForum, vetoForum);
+			else await Promise.all([
+					shallowForumSync(vetoForum, submissionsForum),
+					shallowIntakeSync(submissionsIntake, submissionsForum, maxIntake),
+					shallowJudgeSync(submissionsForum, vetoForum)
+			]);
+
+			// Unlock channels
+			await Promise.all([
+				disableSyncLock(submissionsIntake, {SendMessages: null}),
+				syncForums.map(forum => disableSyncLock(forum, {AddReactions: null}))
+			]);
+		} else {
+			interaction.editReply("**Deep** sync is currently **out of service**.");
+			return;
 		}
 
-		interaction.editReply("Sync complete!");
+		// Respond upon completion
+		typingFlag.value = false; // Notify the indefinite typing to stop
+
+		const differenceSeconds = Math.floor((Date.now() - then) / 1000);
+		await interaction.followUp({
+			embeds: [
+				EmbedBuilder.generateSuccessEmbed(`**${capitalMode}** sync **complete** in **${differenceSeconds}s**!`) // Must use followUp because the typing notification only stops when a message is sent
+						.setFooter({text: "Note: Do not spam this command, as it is very computationally expensive", iconURL: "https://images.emojiterra.com/twitter/v14.0/512px/1f4c4.png"})
+			],
+			ephemeral: true
+		});
 	},
 	pendingThreads: pendingThreads
 };
 
-function fetchChannels(channelManager, ...channelIds) {
-	return Promise.all(channelIds.map(id => channelManager.fetch(id)));
+async function fetchAndLockSyncForums(channelManager) {
+	return Promise.all(
+		[process.env.SUBMISSIONS_FORUM_ID, process.env.VETO_FORUM_ID]
+			.map(forumId => new Promise(async resolve => { // Defer to separate promise to avoid awaiting on the map method
+				const channel = await channelManager.fetch(forumId);
+				await enableSyncLock(channel, {AddReactions: false});
+				resolve(channel);
+			}))
+	);
+}
+
+function enableSyncLock(channel, permissionField) {
+	const lockedName = `${process.env.SYNC_LOCK_TEXT}${channel.name}`;
+	return updateChannelNameAndPermissions(channel, lockedName, permissionField);
+}
+
+function disableSyncLock(channel, permissionField) {
+	const unlockedName = channel.name.slice(process.env.SYNC_LOCK_TEXT.length);
+	return updateChannelNameAndPermissions(channel, unlockedName, permissionField);
+}
+
+async function updateChannelNameAndPermissions(channel, name, permissionField) {
+	console.log("got here!");
+	await channel.setName(name);
+	console.log("Set name for channel", channel.id);
+	await channel.permissionOverwrites.edit(channel.guildId, permissionField);
+	console.log("Set perms for channel", channel.id);
+	// await Promise.all([
+	// 	channel.setName(name), // While it is not essential to wait for the name to change, we do it for clarity during the sync
+	// 	channel.permissionOverwrites.edit(channel.guildId, permissionField)
+	// ]);
+	
+	return channel;
 }
 
 async function shallowForumSync(vetoForum, submissionsForum) {
 	await shallowVetoSync(vetoForum);
-	console.log("Completed Veto Sync");
 	await shallowSubmissionsSync(submissionsForum);
-	console.log("Completed Submissions Sync");
 }
 
 async function shallowIntakeSync(intakeChannel, submissionsForum, maxIntake) {
@@ -156,6 +197,7 @@ async function shallowVetoSync(vetoForum) {
 }
 
 const handleVetoPending = require("../../utility/discord/submissionsVeto/handleVetoPending"); // Circular dependency
+const sendIndefiniteTyping = require("../../utility/discord/messages/sendIndefiniteTyping");
 async function shallowSyncVetoThread(thread, approvedTagId, deniedTagId, pendingTagId) {
 	if(thread.appliedTags.some(tagId => tagId === approvedTagId || tagId === deniedTagId)) return;
 
