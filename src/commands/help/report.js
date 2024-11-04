@@ -31,7 +31,7 @@ module.exports = {
 
 		const modal = new ModalBuilder()
 			.setCustomId(`report-${interaction.options.getSubcommand()}`)
-			.setTitle("TLA Report Menu")
+			.setTitle("TGA Report Menu")
 			.setComponents(
 				new ActionRowBuilder().setComponents(subjectField),
 				new ActionRowBuilder().setComponents(descriptionField)

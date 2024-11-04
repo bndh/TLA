@@ -20,8 +20,9 @@ const linkRegex = require("../../utility/linkRegex");
 const getVideoTitle = require("../../utility/getVideoTitle");
 const TextFormatter = require("../../utility/TextFormatter");
 const createThreadAndReact = require("../../utility/discord/threads/createThreadAndReact");
-
+const sendIndefiniteTyping = require("../../utility/discord/messages/sendIndefiniteTyping");
 const { handleNewThread } = require("../../events/messageCreate");
+const getTagsFromEmojiCodes = require("../../utility/discord/threads/getTagsFromEmojiCodes");
 
 const JUDGEMENT_EMOJI_CODES = process.env.JUDGEMENT_EMOJI_CODES.split(", ");
 const OPEN_EMOJI_CODES = process.env.OPEN_EMOJI_CODES.split(", ");
@@ -85,6 +86,10 @@ module.exports = {
 				channelManager.fetch(process.env.SUBMISSIONS_INTAKE_ID).then(channel => enableSyncLock(channel, {SendMessages: false})),
 				fetchAndLockSyncForums(channelManager) // Sets add reactions to false for all users
 			]);
+			// const [submissionsIntake, syncForums] = await Promise.all([
+			// 	channelManager.fetch(process.env.SUBMISSIONS_INTAKE_ID),
+			// 	Promise.all([process.env.SUBMISSIONS_FORUM_ID, process.env.VETO_FORUM_ID].map(id => channelManager.fetch(id)))
+			// ]);
 			const [submissionsForum, vetoForum] = syncForums;
 
 			// Process channels
@@ -118,6 +123,7 @@ module.exports = {
 			],
 			ephemeral: true
 		});
+		console.info(`Sync by User ${interaction.user.id} in Channel ${interaction.channelId} with Mode ${mode} and maxIntake ${maxIntake} has now ended`);
 	},
 	pendingThreads: pendingThreads
 };
@@ -144,15 +150,10 @@ function disableSyncLock(channel, permissionField) {
 }
 
 async function updateChannelNameAndPermissions(channel, name, permissionField) {
-	console.log("got here!");
-	await channel.setName(name);
-	console.log("Set name for channel", channel.id);
-	await channel.permissionOverwrites.edit(channel.guildId, permissionField);
-	console.log("Set perms for channel", channel.id);
-	// await Promise.all([
-	// 	channel.setName(name), // While it is not essential to wait for the name to change, we do it for clarity during the sync
-	// 	channel.permissionOverwrites.edit(channel.guildId, permissionField)
-	// ]);
+	await Promise.all([
+		channel.setName(name), // While it is not essential to wait for the name to change, we do it for clarity during the sync
+		channel.permissionOverwrites.edit(channel.guildId, permissionField)
+	]);
 	
 	return channel;
 }
@@ -168,8 +169,6 @@ async function shallowIntakeSync(intakeChannel, submissionsForum, maxIntake) {
 
 	for(const message of messages) { // Must do synchronously to avoid duplicate threads
 		const videoLinks = getVideosFromMessage(message);
-
-		console.log(message.channelId, message.guildId, message.id, videoLinks)
 		for(const videoLink of videoLinks) {
 			if(await submissionLinkExists(videoLink)) continue;
 
@@ -197,7 +196,6 @@ async function shallowVetoSync(vetoForum) {
 }
 
 const handleVetoPending = require("../../utility/discord/submissionsVeto/handleVetoPending"); // Circular dependency
-const sendIndefiniteTyping = require("../../utility/discord/messages/sendIndefiniteTyping");
 async function shallowSyncVetoThread(thread, approvedTagId, deniedTagId, pendingTagId) {
 	if(thread.appliedTags.some(tagId => tagId === approvedTagId || tagId === deniedTagId)) return;
 
@@ -259,15 +257,6 @@ async function syncJudgeDocsFromMap(judgeIdMap) {
 		judgeIdMap.entries(),
 		([judgeId, {counselled, closed}]) => Judge.enqueue(() => Judge.updateOne({userId: judgeId}, {counselledSubmissionIds: counselled, totalSubmissionsClosed: closed}))
 	));
-}
-
-function getTagsFromEmojiCodes(forum, emojiCodes, ordered = false) {
-	const filteredTags = forum.availableTags.filter(tag => emojiCodes.includes(tag.emoji.name));
-	if(ordered) { // Need ordered step as availableTags order may not correspond with inputted tagNames order
-		const emojiCodeIndexMap = new Map([emojiCodes.map((name, index) => [name, index])]);
-		filteredTags.sort((nameA, nameB) => emojiCodeIndexMap.get(nameA) - emojiCodeIndexMap.get(nameB));
-	}
-	return filteredTags;
 }
 
 

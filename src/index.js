@@ -38,6 +38,8 @@ const client = new Client({ // TODO fix admin override (doesnt actually re-deny)
 	registerListeners();
 	await client.login(process.env.TOKEN);
 	await checkChannels();
+
+	
 })();
 
 function loadCommands() {

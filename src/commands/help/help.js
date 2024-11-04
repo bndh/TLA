@@ -10,7 +10,7 @@ const helpEmbed = generateHelpEmbed(helpCategories);
 module.exports = {
 	data: new SlashCommandBuilder()
 		.setName("help")
-		.setDescription("Gives helpful information about all aspects of TLA."),
+		.setDescription("Gives helpful information about all aspects of TGA."),
 	async execute(interaction) {
 		await interaction.deferReply({ephemeral: true});
 		
@@ -60,7 +60,7 @@ function generateHelpEmbed(helpCategories) {
 		value: category.description, 
 		inline: true
 	}));
-	return EmbedBuilder.generateNeutralEmbed(description, {name: "TLA Bot Help"})
+	return EmbedBuilder.generateNeutralEmbed(description, {name: "TGA Bot Help"})
 		.setFields(...fields)
 		.setFooter({text: "Time Limit: 90s", iconURL: "https://em-content.zobj.net/source/twitter/408/timer-clock_23f2-fe0f.png"});
 }
@@ -95,6 +95,6 @@ function generateCategoryEmbed(helpCategory) {
 
 	return new EmbedBuilder() 
 		.setDescription(description)
-		.setAuthor({name: `TLA Bot ${helpCategory.label} Section`, iconURL: helpCategory.emojiURL})
+		.setAuthor({name: `TGA Bot ${helpCategory.label} Section`, iconURL: helpCategory.emojiURL})
 		.setColor(helpCategory.color);
 }
