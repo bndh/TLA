@@ -8,7 +8,7 @@ module.exports = {
 		.setDescription("Manually remove a user from their position.")
 		.addUserOption(optionBuilder => 
 			optionBuilder.setName("delistee")
-				.setDescription("The person to be delisted.")
+				.setDescription("The user to be delisted. (Also may use user ID).")
 				.setRequired(true)
 		)
 		.setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
