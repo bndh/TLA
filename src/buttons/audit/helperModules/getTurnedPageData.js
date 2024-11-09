@@ -12,7 +12,7 @@ module.exports = async (client, auditEmbed, auditActionRow, right = true) => {
 	const maxPages = pageNumbers[1];
 	 
 	const auditeesPromise = await Auditee.find({})
-										 .sort({judgedInInterim: -1}) // Sort descending
+										 .sort({judgedInInterim: -1, userId: -1}) // Sort descending
 										 .skip(newPageIndex * parseInt(process.env.AUDITEES_PER_PAGE))
 										 .limit(parseInt(process.env.AUDITEES_PER_PAGE))
 										 .exec();

@@ -105,7 +105,12 @@ function generateDisabledActionRow(actionRow) {
 
 async function generateReply(client) {
 	const allAuditees = await prepareAuditees();
-	const sortedAuditees = allAuditees.sort((auditeeA, auditeeB) => auditeeB.judgedInInterim - auditeeA.judgedInInterim);
+	const sortedAuditees = allAuditees.sort((auditeeA, auditeeB) => {
+		if(auditeeA.judgedInInterim === auditeeB.judgedInInterim) {
+			return auditeeB.userId - auditeeA.userId;
+		}
+		return auditeeB.judgedInInterim - auditeeA.judgedInInterim;
+	});
 	const visibleAuditees = sortedAuditees.slice(0, parseInt(process.env.AUDITEES_PER_PAGE));
 
 	const auditEmbed = await generateAuditEmbed(client, visibleAuditees, allAuditees.length);
@@ -364,10 +369,10 @@ const rejectedStatuses = ["REJECTED", "VETOED"];
 const subSizes = [10, 11, 11, 11];
 async function generateFormattedSubCounts() {
 	const counts = await Promise.all([
-		Submission.enqueue(() => Submission.countDocuments({status: "AWAITING DECISION"}).exec()),
-		Submission.enqueue(() => Submission.countDocuments({status: {$in: unvetoedStatuses}}).exec()),
-		Submission.enqueue(() => Submission.countDocuments({status: "APPROVED"}).exec()),
-		Submission.enqueue(() => Submission.countDocuments({status: {$in: rejectedStatuses}}).exec())
+		Submission.enqueue(() => Submission.countDocuments({status: "AWAITING DECISION"}).exec()), // Unscreened
+		Submission.enqueue(() => Submission.countDocuments({status: {$in: unvetoedStatuses}}).exec()), // Unvetoed
+		Submission.enqueue(() => Submission.countDocuments({status: "APPROVED"}).exec()), // Approved
+		Submission.enqueue(() => Submission.countDocuments({status: {$in: rejectedStatuses}}).exec()) // Rejected
 	]);
 	for(let i = 0; i < counts.length; i++) { // Fields are different sizes
 		counts[i] = TextFormatter.digitiseNumber(counts[i], 5, "WHITE", undefined, undefined, subSizes[i]);
