@@ -60,7 +60,7 @@ module.exports = {
 	async execute(interaction) { 
 		// Get options
 		const mode = interaction.options.getString("mode", true);
-		const deep = interaction.options.getString("deep", false) ?? false;
+		const deep = interaction.options.getBoolean("deep", false) ?? false;
 		const maxIntake = interaction.options.getInteger("max-intake", false) ?? process.env.MAX_INTAKE_SYNC;
 
 		// Notify console
@@ -73,7 +73,7 @@ module.exports = {
 				EmbedBuilder.generateNeutralEmbed(`Starting **${capitalMode}** sync!\nPlease be patient; this may **take a while**...`)
 						  .setFooter({text: "Note: Do not re-use this command until the notified of its completion", iconURL: "https://images.emojiterra.com/twitter/v14.0/512px/1f4c4.png"})
 			],
-			ephemeral: true
+			ephemeral: false
 		});
 		const typingFlag = sendIndefiniteTyping(interaction.channel);
 		const then = Date.now(); // Used in the concluding response to check how long the sync took
@@ -121,7 +121,7 @@ module.exports = {
 				EmbedBuilder.generateSuccessEmbed(`**${capitalMode}** sync **complete** in **${differenceSeconds}s**!`) // Must use followUp because the typing notification only stops when a message is sent
 						.setFooter({text: "Note: Do not spam this command, as it is very computationally expensive", iconURL: "https://images.emojiterra.com/twitter/v14.0/512px/1f4c4.png"})
 			],
-			ephemeral: true
+			ephemeral: false
 		});
 		console.info(`Sync by User ${interaction.user.id} in Channel ${interaction.channelId} with Mode ${mode} and maxIntake ${maxIntake} has now ended`);
 	},

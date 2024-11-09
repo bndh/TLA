@@ -31,7 +31,7 @@ module.exports = {
 
 		if(submissionDocs.length === 0) {
 			await interaction.editReply({embeds: [
-				EmbedBuilder.generateFailEmbed("Could **not find** any submissions which **matched your query**!\nIf you believe this is **incorrect**, please contact _**@gamingpharoah**_.")
+				EmbedBuilder.generateFailEmbed("Could **not find** any submissions which **matched your query**!\nIf you believe this is **incorrect**, please contact _**@gamingpharaoh**_.")
 			]});
 			return;
 		}

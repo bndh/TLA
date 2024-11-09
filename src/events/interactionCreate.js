@@ -65,7 +65,7 @@ async function handleButtonInteraction(interaction) {
 			}
 		}
 	} else {
-		const permissionErrorEmbed = EmbedBuilder.generateFailEmbed("**Insufficient permissions**!\nIf you believe this is **incorrect**, please contact _**@gamingpharoah**_.");
+		const permissionErrorEmbed = EmbedBuilder.generateFailEmbed("**Insufficient permissions**!\nIf you believe this is **incorrect**, please contact _**@gamingpharaoh**_.");
 		if(interaction.replied || interaction.deferred) {
 			interaction.editReply({embeds: [permissionErrorEmbed]});
 		} else {

@@ -25,7 +25,7 @@ module.exports = () => {
 	};
 
 	EmbedBuilder.generateFailEmbed = (
-		description = "Something went **wrong**! Please **try again**.\nIf the issue **persists**, please contact _**@gamingpharoah**_.",
+		description = "Something went **wrong**! Please **try again**.\nIf the issue **persists**, please contact _**@gamingpharaoh**_.",
 		author = {name: "TGA Admin Team", url: "https://www.youtube.com/@bndh4409", iconURL: process.env.EXTREME_DEMON_URL}
 	) => {
 		if(!author.iconURL) author.iconURL = process.env.EXTREME_DEMON_URL;

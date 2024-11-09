@@ -1,5 +1,5 @@
 require("dotenv").config();
-const {Client, Collection, GatewayIntentBits, Partials} = require("discord.js");
+const {Client, Collection, GatewayIntentBits, Partials, EmbedBuilder} = require("discord.js");
 const path = require("path");
 
 const mongoose = require("mongoose");
@@ -38,8 +38,6 @@ const client = new Client({ // TODO fix admin override (doesnt actually re-deny)
 	registerListeners();
 	await client.login(process.env.TOKEN);
 	await checkChannels();
-
-	
 })();
 
 function loadCommands() {
