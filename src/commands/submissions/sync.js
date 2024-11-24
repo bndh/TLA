@@ -71,7 +71,7 @@ module.exports = {
 		await interaction.reply({
 			embeds: [
 				EmbedBuilder.generateNeutralEmbed(`Starting **${capitalMode}** sync!\nPlease be patient; this may **take a while**...`)
-						  .setFooter({text: "Note: Do not re-use this command until the notified of its completion", iconURL: "https://images.emojiterra.com/twitter/v14.0/512px/1f4c4.png"})
+						  .setFooter({text: "Note: Please be patient. If spammed, the bot will explode.", iconURL: "https://images.emojiterra.com/twitter/v14.0/512px/1f4c4.png"})
 			],
 			ephemeral: false
 		});
@@ -119,7 +119,7 @@ module.exports = {
 		await interaction.followUp({
 			embeds: [
 				EmbedBuilder.generateSuccessEmbed(`**${capitalMode}** sync **complete** in **${differenceSeconds}s**!`) // Must use followUp because the typing notification only stops when a message is sent
-						.setFooter({text: "Note: Do not spam this command, as it is very computationally expensive", iconURL: "https://images.emojiterra.com/twitter/v14.0/512px/1f4c4.png"})
+						.setFooter({text: "Note: Do not spam this command, as it is very computationally expensive.", iconURL: "https://images.emojiterra.com/twitter/v14.0/512px/1f4c4.png"})
 			],
 			ephemeral: false
 		});

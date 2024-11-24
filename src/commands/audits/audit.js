@@ -27,18 +27,18 @@ module.exports = {
 		
 		console.info(`COMMAND ${this.data.name} USED BY ${interaction.user.id} IN ${interaction.channelId} WITH overwrite ${overwrite}`);
 
-		let snapshotPromise;
-		if(overwrite) {
-			snapshotPromise = snapshot(interaction.client);
-		} else {
-			const previousSnapshotExists = await Info.exists({id: "snapshotCreationTime"});
-			if(!previousSnapshotExists) snapshotPromise = snapshot(interaction.client);
-		}
-
 		const replyPromise = generateReply(interaction.client);
 		const disablePromise = disableOldAudit(interaction.client);
 
-		const completionData = await Promise.all([replyPromise, snapshotPromise, disablePromise]);
+		const completionData = await Promise.all([replyPromise, disablePromise]);
+		
+		if(overwrite) {
+			await snapshot(interaction.client); // Snapshot transforms data used in the audit so it must occur after the audit is performed
+		} else {
+			const previousSnapshotExists = await Info.exists({id: "snapshotCreationTime"});
+			if(!previousSnapshotExists) await snapshot(interaction.client);
+		}
+
 		const response = await interaction.editReply(completionData[0]);
 
 		await Promise.all([ // Await for error handling

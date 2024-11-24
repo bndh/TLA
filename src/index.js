@@ -18,7 +18,8 @@ const client = new Client({ // TODO fix admin override (doesnt actually re-deny)
 		GatewayIntentBits.GuildMessageReactions, // TODO sync beautification
 		GatewayIntentBits.GuildMembers, // TODO Issue iwth intake sync??
 		GatewayIntentBits.GuildMessages, // TODO check blue 
-		GatewayIntentBits.MessageContent
+		GatewayIntentBits.MessageContent,
+		GatewayIntentBits.DirectMessages
 	],
 	partials: [
 		Partials.Channel, // TODO improve judge sync efficiency

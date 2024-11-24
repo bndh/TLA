@@ -35,14 +35,15 @@ module.exports = {
 		const permissibleSubmissions = await Submission.enqueue(() => // While we could just return the first result, we pick one randomly so that if a judge was stuck with a submission, they should be able to have the command generate a different one in a few tries 
 			Submission.aggregate([
 				{$match: {threadId: {$nin: counselledSubmissionIds}, status: {$in: permissibleStatuses}}},
-				{$sample: {size: 1}}
+				// {$sample: {size: 1}}
 			]).exec()
 		);
-		
+
 		if(permissibleSubmissions.length === 0) {
 			await interaction.editReply({embeds: [EmbedBuilder.generateSuccessEmbed("You've judged **every submission!**\nKeep up the good work!")]});
 			return;
 		}
+
 		const thread = await interaction.client.channels.fetch(permissibleSubmissions[0].threadId);
 
 		let responseText = "Found ";
