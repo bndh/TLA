@@ -182,7 +182,7 @@ async function shallowJudgeSync(submissionsForum, vetoForum) {
 	const judgeIdMaps = judgeGroups.map(judgeGroup => new Map(judgeGroup.map(judge => [judge.userId, {counselled: [], closed: 0}])))
 
 	await Promise.all([
-		judgeSyncForum(submissionsForum, judgeIdMaps[1]), // Pushing asynchronously is safe in JS so this works fine
+		judgeSyncForum(submissionsForum, judgeIdMaps[2]), // Pushing asynchronously is safe in JS so this works fine
 		judgeSyncForum(vetoForum, ...judgeIdMaps)
 	]);
 	

@@ -40,13 +40,17 @@ const client = new Client({ // TODO fix admin override (doesnt actually re-deny)
 	await client.login(process.env.TOKEN);
 	await checkChannels();
 
-	const channel = await client.channels.fetch("1288570448883486761");
-	const message = await channel.fetchStarterMessage({force: true});
-	const messageLines = message.content.split("\n");
-	// messageLines.splice(4, 2);//"__*Veto Overturn Requests:*__\n**None**");
-	
-	const editedContent = messageLines.join("\n");
-	message.edit(editedContent);
+	// const channel = await client.channels.fetch("1288570448883486761");
+	// const message = await channel.fetchStarterMessage({force: true});
+	// const messageLines = message.content.split("\n");
+	// const lineOneWords = messageLines[0].split(" ");
+	// messageLines.splice(0, 1);
+	// lineOneWords[1] = "**Judging"
+	// lineOneWords[2] = "Concluded**"
+	// messageLines[2] = "<@508682299089616904>"
+	// const editedContent = [lineOneWords.join(" "), ...messageLines].join("\n");
+	// message.edit(editedContent);
+	// console.log("Fixed voidscapes https://discord.com/channels/950299679692845087/1288570448883486761")
 
 	// // const { Submission } = require("./mongo/mongoModels").modelData;
 	// // const docs = await Submission.find({status: "VETOED"}).exec();
