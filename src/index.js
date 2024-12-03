@@ -40,20 +40,28 @@ const client = new Client({ // TODO fix admin override (doesnt actually re-deny)
 	await client.login(process.env.TOKEN);
 	await checkChannels();
 
-	// const { Submission } = require("./mongo/mongoModels").modelData;
-	// const docs = await Submission.find({status: "VETOED"}).exec();
-	// await Promise.all(docs.map(doc => new Promise(async resolve => {
-	// 	const thread = await client.channels.fetch(doc.threadId);
-	// 	const message = await thread.fetchStarterMessage({force: true});
-	// 	const messageLines = message.content.split("\n\n");
-	// 	messageLines.splice(1, 0, "__*Veto Overturn Requests:*__\n**None**");
-	// 	const editedText = messageLines.join("\n\n");
+	const channel = await client.channels.fetch("1288570448883486761");
+	const message = await channel.fetchStarterMessage({force: true});
+	const messageLines = message.content.split("\n");
+	// messageLines.splice(4, 2);//"__*Veto Overturn Requests:*__\n**None**");
+	
+	const editedContent = messageLines.join("\n");
+	message.edit(editedContent);
+
+	// // const { Submission } = require("./mongo/mongoModels").modelData;
+	// // const docs = await Submission.find({status: "VETOED"}).exec();
+	// // await Promise.all(docs.map(doc => new Promise(async resolve => {
+	// // 	const thread = await client.channels.fetch(doc.threadId);
+	// // 	const message = await thread.fetchStarterMessage({force: true});
+	// // 	const messageLines = message.content.split("\n\n");
+	// // 	messageLines.splice(1, 0, "__*Veto Overturn Requests:*__\n**None**");
+	// // 	const editedText = messageLines.join("\n\n");
 
 	// 	const actionRow = new ActionRowBuilder();
 	// 	const {data: overturnButton} = require("./buttons/overturn/overturn");
 	// 	actionRow.addComponents(overturnButton);
 		
-	// 	await message.edit({content: editedText, components: [actionRow]});
+	// 	await message.edit({components: [actionRow]});//{content: editedText, components: [actionRow]});
 	// 	resolve();
 	// })));
 	// console.log("Done");

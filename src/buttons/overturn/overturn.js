@@ -34,7 +34,7 @@ module.exports = {
 			overturnRequests++;
 
 			const overturnUserId = overturnUserMatch[1];
-			if(overturnUserId === interaction.userid) {
+			if(overturnUserId === interaction.user.id) {
 				await interaction.followUp({
 					embeds: [EmbedBuilder.generateFailEmbed("You have **already requested** to overturn this submission!")],
 					ephemeral: true
@@ -58,11 +58,11 @@ module.exports = {
 			]);
 			console.log(`Veto Overturn Request on Thread ${interaction.channelId} Success; User ${interaction.user.id} was the Final Required Requester`);
 		} else {
-			if(overturnRequests !== 0) textSegments[3] += ", ";
+			if(overturnRequests !== 1) textSegments[3] += ", "; // TODO: This is pretty scuffed; it is actually 1 in the case where it was none and is about to have someone (aka, first runthrough)
 			else textSegments[3] = "";
 			textSegments[3] += interaction.user.toString();
 			await interaction.message.edit(textSegments.join("\n"));
-			console.log(`Veto Overturn Request on Thread ${interaction.channelId} Success; User ${interaction.user.id} is Requester ${overturnRequests + 1}`);
+			console.log(`Veto Overturn Request on Thread ${interaction.channelId} Success; User ${interaction.user.id} is Requester ${overturnRequests}`);
 		}
 	}
 }
