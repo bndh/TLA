@@ -151,7 +151,7 @@ function disableSyncLock(channel, permissionField) {
 
 async function updateChannelNameAndPermissions(channel, name, permissionField) {
 	await Promise.all([
-		channel.setName(name), // While it is not essential to wait for the name to change, we do it for clarity during the sync
+	//	channel.setName(name), // While it is not essential to wait for the name to change, we do it for clarity during the sync
 		channel.permissionOverwrites.edit(channel.guildId, permissionField)
 	]);
 	
@@ -178,7 +178,7 @@ async function shallowIntakeSync(intakeChannel, submissionsForum, maxIntake) {
 }
 
 async function shallowJudgeSync(submissionsForum, vetoForum) {
-	const judgeGroups = await Promise.all(["nominator", "admin"].map(judgeType => Judge.enqueue(() => Judge.find({judgeType: {$in: judgeType}}).exec())));
+	const judgeGroups = await Promise.all(["nominator", "assessor", "admin"].map(judgeType => Judge.enqueue(() => Judge.find({judgeType: {$in: judgeType}}).exec())));
 	const judgeIdMaps = judgeGroups.map(judgeGroup => new Map(judgeGroup.map(judge => [judge.userId, {counselled: [], closed: 0}])))
 
 	await Promise.all([
@@ -243,7 +243,7 @@ async function pushJudgedFromThread(judgeIdMaps, thread, closedTagIds) {
 	const threadClosed = thread.appliedTags.some(appliedTagId => closedTagIds.includes(appliedTagId))
 
 	for(const userId of reactedUserIds) {
-		const map = judgeIdMaps.find(idMap => idMap.get(userId)); // Must find which map the user belongs to, in this case nominator or admin
+		const map = judgeIdMaps.find(idMap => idMap.get(userId)); // Must find which map the user belongs to, in this case nominator, assessor or admin
 		const judged = map?.get(userId);
 		if(!judged) continue;
 

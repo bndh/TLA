@@ -57,13 +57,17 @@ async function snapshotJudges() {
 		savePromises[i] = new Promise(async (resolve) => {
 			const judgeDocument = judgeDocuments[i];
 			const currentJudgedTotal = judgeDocument.counselledSubmissionIds.length + judgeDocument.totalSubmissionsClosed;
-	
-			judgeDocument.snappedJudgedInterim = currentJudgedTotal; // If no previous snapshot is present, this will suffice
-			if(judgeDocument.snappedJudgedTotal) judgeDocument.snappedJudgedInterim -= judgeDocument.snappedJudgedTotal; // If the document had been previously snapped, we must subtract the total at the time of that snapshot to get the number judged in the interim
-		
+
+			if(judgeDocument.snappedJudgedTotal) judgeDocument.snappedJudgedInterim = currentJudgedTotal - judgeDocument.snappedJudgedTotal; // If the document had been previously snapped, we must subtract the total at the time of that snapshot to get the number judged in the interim
+			else judgeDocument.snappedJudgedInterim = currentJudgedTotal; // If no previous snapshot is present, this will suffice
+
 			judgeDocument.snappedJudgedTotal = currentJudgedTotal;
 
-			await Judge.enqueue(() => judgeDocument.save());
+			if(judgeDocument.snappedJudgedInterim >= 0) {
+				await Judge.enqueue(() => judgeDocument.save());
+			} else {
+				console.error(`User ${judgeDocument.userId} has invalid snappedJudgedInterim at ${judgeDocument.snappedJudgedInterim}, not saving.`);
+			}
 			resolve();
 		});
 	}

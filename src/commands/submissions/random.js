@@ -29,21 +29,22 @@ module.exports = {
 
 		const counselledSubmissionIds = judgeEntry.counselledSubmissionIds;
 		let permissibleStatuses;
-		if(judgeEntry.judgeType === "nominator") permissibleStatuses = ["AWAITING VETO", "PENDING APPROVAL"]; 
-		else permissibleStatuses = ["AWAITING VETO", "AWAITING DECISION", "PENDING APPROVAL"]; // Admin
+		if(judgeEntry.judgeType === "admin") permissibleStatuses = ["AWAITING VETO", "AWAITING DECISION", "PENDING APPROVAL"];
+		else permissibleStatuses = ["AWAITING VETO", "PENDING APPROVAL"]; // Nominator, assessor
 		
 		const permissibleSubmissions = await Submission.enqueue(() => // While we could just return the first result, we pick one randomly so that if a judge was stuck with a submission, they should be able to have the command generate a different one in a few tries 
 			Submission.aggregate([
 				{$match: {threadId: {$nin: counselledSubmissionIds}, status: {$in: permissibleStatuses}}},
-				// {$sample: {size: 1}}
+				{$sample: {size: 1}} // Picks random submission
 			]).exec()
 		);
-
 		if(permissibleSubmissions.length === 0) {
 			await interaction.editReply({embeds: [EmbedBuilder.generateSuccessEmbed("You've judged **every submission!**\nKeep up the good work!")]});
+			console.info(`Command random used by ${interaction.user.id} in ${interaction.channelId}, yielding no judged submission. (All were already judged).`);
 			return;
 		}
 
+		console.info(`Command random used by ${interaction.user.id} in ${interaction.channelId}, yielding ${permissibleSubmissions[0].threadId}.`)
 		const thread = await interaction.client.channels.fetch(permissibleSubmissions[0].threadId);
 
 		let responseText = "Found ";
@@ -54,8 +55,7 @@ module.exports = {
 		} else {
 			responseText += "**unjudged layout** ";
 		}
-		responseText += `at: ${thread.url}`; // All threads are titled "New Submission!" (shown in the shortcut of thread.url), so no need for any closing punctuation here
-		responseText += "\n_Please note that this command may not be accurate due to recent bot downtime..._"
+		responseText += `at: ${thread.url}!`; // All threads are titled "New Submission!" (shown in the shortcut of thread.url), so no need for any closing punctuation here
 		await interaction.editReply(responseText);
 	}
 };

@@ -8,6 +8,11 @@ const Coloriser = require("../../utility/Coloriser");
 const TextFormatter = require("../../utility/TextFormatter");
 const { snapshot } = require("./snapshot");
 
+const ADMIN_COLOR_CODE = parseInt(process.env.ADMIN_COLOR_CODE);
+const ASSESSOR_COLOR_CODE = parseInt(process.env.ASSESSOR_COLOR_CODE);
+const NOMINATOR_COLOR_CODE = parseInt(process.env.NOMINATOR_COLOR_CODE);
+const JUDGE_TYPE_COLOR_MAP = new Map([["admin", ADMIN_COLOR_CODE], ["assessor", ASSESSOR_COLOR_CODE], ["nominator", NOMINATOR_COLOR_CODE]]);
+
 const DIVIDER = Coloriser.color("│", "GREY");
 // TODO Ditto '' for same interim values
 module.exports = {
@@ -313,10 +318,9 @@ function generateIndexText(index) {
 
 function generateUserText(name, judgeType) {
 	const sizedName = TextFormatter.resizeEnd(name, 16, " ", "..");
-
-	let auditeeColorCode = 7;
-	if(judgeType === "admin") auditeeColorCode = +process.env.ADMIN_COLOR_CODE;
-	else if(judgeType === "nominator") auditeeColorCode = +process.env.NOMINATOR_COLOR_CODE;
+	
+	let auditeeColorCode = JUDGE_TYPE_COLOR_MAP.get(judgeType) ?? 7;
+	
 	return Coloriser.color(sizedName, auditeeColorCode);
 }
 

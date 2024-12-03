@@ -26,6 +26,7 @@ module.exports = {
 				.setRequired(true)
 				.addChoices(
 					{name: "LN", value: "nominator"},
+					{name: "NAT", value: "assessor"},
 					{name: "Admin", value: "admin"}
 				)
 		)
@@ -39,8 +40,8 @@ module.exports = {
 		console.info(`COMMAND ${this.data.name} USED BY ${interaction.user.id} IN ${interaction.channelId} WITH registree ${registree} AND judgeType ${judgeType}`);
 
 		let forumIds;
-		if(judgeType === "nominator") forumIds = [process.env.VETO_FORUM_ID];
-		else forumIds = [process.env.VETO_FORUM_ID, process.env.SUBMISSIONS_FORUM_ID];
+		if(judgeType === "admin") forumIds = [process.env.VETO_FORUM_ID, process.env.SUBMISSIONS_FORUM_ID];
+		else forumIds = [process.env.VETO_FORUM_ID];
 		const forums = await Promise.all(forumIds.map(forumId => interaction.client.channels.fetch(forumId)));
 
 		const {counselledSubmissionIds, totalSubmissionsClosed} = await tallyRegistreeSubmissions(forums, registree.id);
