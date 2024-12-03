@@ -1,5 +1,5 @@
 require("dotenv").config();
-const {Client, Collection, GatewayIntentBits, Partials, EmbedBuilder} = require("discord.js");
+const {Client, Collection, GatewayIntentBits, Partials, EmbedBuilder, ActionRow, ActionRowBuilder} = require("discord.js");
 const path = require("path");
 
 const mongoose = require("mongoose");
@@ -39,6 +39,24 @@ const client = new Client({ // TODO fix admin override (doesnt actually re-deny)
 	registerListeners();
 	await client.login(process.env.TOKEN);
 	await checkChannels();
+
+	// const { Submission } = require("./mongo/mongoModels").modelData;
+	// const docs = await Submission.find({status: "VETOED"}).exec();
+	// await Promise.all(docs.map(doc => new Promise(async resolve => {
+	// 	const thread = await client.channels.fetch(doc.threadId);
+	// 	const message = await thread.fetchStarterMessage({force: true});
+	// 	const messageLines = message.content.split("\n\n");
+	// 	messageLines.splice(1, 0, "__*Veto Overturn Requests:*__\n**None**");
+	// 	const editedText = messageLines.join("\n\n");
+
+	// 	const actionRow = new ActionRowBuilder();
+	// 	const {data: overturnButton} = require("./buttons/overturn/overturn");
+	// 	actionRow.addComponents(overturnButton);
+		
+	// 	await message.edit({content: editedText, components: [actionRow]});
+	// 	resolve();
+	// })));
+	// console.log("Done");
 })();
 
 function loadCommands() {
