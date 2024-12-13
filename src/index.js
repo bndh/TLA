@@ -31,7 +31,7 @@ const client = new Client({ // TODO fix admin override (doesnt actually re-deny)
 // TODO veto pendings with same votes get vetoed instead of approved
 (async () => {
 	mongoModels.setup(); // TODO status command
-	await mongoose.connect(process.env.MONGODB_URI);
+	await mongoose.connect(process.env.MONGODB_URI.replace("<db_password>", process.env.DATABASE_PASSWORD));
 	console.log("Connected to Mongoose!"); 
 
 	pushEmbedFunctions(); 
@@ -40,8 +40,11 @@ const client = new Client({ // TODO fix admin override (doesnt actually re-deny)
 	await client.login(process.env.TOKEN);
 	await checkChannels();
 
-	// const channel = await client.channels.fetch("1288570448883486761");
+	// const channel = await client.channels.fetch("1316454740439339010");
+	// console.log(channel.id);
 	// const message = await channel.fetchStarterMessage({force: true});
+	// console.log(message.id);
+	// message.react(process.env.JUDGEMENT_EMOJI_CODES.split(", ")[1]);
 	// const messageLines = message.content.split("\n");
 	// const lineOneWords = messageLines[0].split(" ");
 	// messageLines.splice(0, 1);
@@ -74,7 +77,7 @@ const client = new Client({ // TODO fix admin override (doesnt actually re-deny)
 function loadCommands() {
 	client.commands = new Collection(); // Attach a commands property to our client which is accessible in other files
 
-	const commands = getAllExports(path.join(__dirname, "commands"), file => !file.name.toLowerCase().endsWith("modules"));
+	const commands = getAllExports(path.join(__dirname, "commands"), file => !file.name.toLowerCase().endsWith("modules") && !file.name.toLowerCase().endsWith("files"));
 	for(const command of commands) {
 		if("data" in command && "execute" in command) {
 			client.commands.set(command.data.name, command); // Set a new item in the Collection with key as the command name and value as the command module itself

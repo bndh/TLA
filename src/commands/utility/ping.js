@@ -7,7 +7,7 @@ module.exports = {
 		.addBooleanOption(optionBuilder =>
 			optionBuilder.setName("ephemeral")
 			.setDescription("Whether or not the response will be visible to other users.")
-				.setRequired(false)
+			.setRequired(false)
 		),
 	execute(interaction) {
 		let ephemeral = interaction.options.getBoolean("ephemeral", false) ?? true;

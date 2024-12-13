@@ -8,7 +8,7 @@ pushEmbedFunctions();
 
 const commands = [];
 	
-for(const command of getAllExports(path.join(__dirname, "commands"), file => !file.name.toLowerCase().endsWith("modules"))) {
+for(const command of getAllExports(path.join(__dirname, "commands"), file => !file.name.toLowerCase().endsWith("modules") && !file.name.toLowerCase().endsWith("files"))) {
 	if("data" in command && "execute" in command) {
 		commands.push(command.data.toJSON());
 	} else {

@@ -203,6 +203,7 @@ async function shallowSyncVetoThread(thread, approvedTagId, deniedTagId, pending
 
 	if(thread.appliedTags.includes(pendingTagId)) {
 		const doc = await Submission.enqueue(() => Submission.findOne({threadId: thread.id}).exec());
+		console.log(`${doc} for ${thread.id}`)
 		if(doc.expirationTime <= Date.now()) return handleVetoJudgement(thread.client, thread.id);
 	} else { // Thread is not closed or pending
 		const [upvotes, downvotes] = tallyReactions(videoMessage, JUDGEMENT_EMOJI_CODES);
@@ -239,6 +240,9 @@ async function judgeSyncForum(forum, ...judgeIdMaps) {
 
 async function pushJudgedFromThread(judgeIdMaps, thread, closedTagIds) {
 	const videoMessage = await thread.fetchStarterMessage({force: true});
+
+	JUDGEMENT_EMOJI_CODES.forEach(emojiCode => { if(videoMessage.reactions.resolve(emojiCode) === null) { console.log(thread.id) }});
+
 	const reactedUserIds = await getReactedUserIds(videoMessage, JUDGEMENT_EMOJI_CODES);
 	const threadClosed = thread.appliedTags.some(appliedTagId => closedTagIds.includes(appliedTagId))
 
