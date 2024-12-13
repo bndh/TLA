@@ -42,7 +42,7 @@ async function handleSubmissionResponse(messageReaction, submissionThread, judge
 	}
 	if(messageReaction.emoji.name === JUDGEMENT_EMOJI_CODES[0]) await handleSubmissionApprove(submissionThread, messageReaction.message);
 	else if(messageReaction.emoji.name === JUDGEMENT_EMOJI_CODES[1]) await handleSubmissionReject(submissionThread);
-	// submissionThread.setArchived(true);
+	submissionThread.setArchived(true);
 }
 
 async function handleVetoResponse(messageReaction, submissionThread, judge) {
