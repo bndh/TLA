@@ -2,7 +2,7 @@ const hasReacted = require("./hasReacted");
 const getAllThreads = require("../threads/getAllThreads");
 
 module.exports = async (forum, userId, reactionCodes, checkForReactionAbsence = false, tagIdsToAvoid = []) => {
-	const threads = await getAllThreads(forum);
+	const threads = await getAllThreads(forum, true);
 	
 	const filteredThreads = [];
 	for(const thread of threads.values()) {

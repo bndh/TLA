@@ -21,7 +21,7 @@ module.exports = {
 
 		await Promise.all([process.env.SUBMISSIONS_FORUM_ID, process.env.VETO_FORUM_ID].map(channelId => new Promise(async resolve => {
 			const channel = await interaction.client.channels.fetch(channelId);
-			const threads = await getAllThreads(channel);
+			const threads = await getAllThreads(channel, true);
 			await Promise.all(threads.map(thread => titleThreadAndDoc(thread)));
 			resolve();
 		})));

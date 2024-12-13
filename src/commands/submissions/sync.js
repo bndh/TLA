@@ -190,7 +190,7 @@ async function shallowJudgeSync(submissionsForum, vetoForum) {
 }
 
 async function shallowVetoSync(vetoForum) {
-	const threads = await getAllThreads(vetoForum);
+	const threads = await getAllThreads(vetoForum, true);
 	const specialTags = getTagsFromEmojiCodes(vetoForum, [...JUDGEMENT_EMOJI_CODES, OPEN_EMOJI_CODES[1]], true).map(tag => tag.id);
 	return Promise.all([threads.map(thread => shallowSyncVetoThread(thread, ...specialTags))]);
 }
@@ -214,7 +214,7 @@ async function shallowSyncVetoThread(thread, approvedTagId, deniedTagId, pending
 }
 
 async function shallowSubmissionsSync(submissionsForum) {
-	const threads = await getAllThreads(submissionsForum);
+	const threads = await getAllThreads(submissionsForum, true);
 	const closedTagIds = getTagsFromEmojiCodes(submissionsForum, JUDGEMENT_EMOJI_CODES).map(tag => tag.id);
 	return Promise.all([threads.map(thread => shallowSyncSubmissionsThread(thread, closedTagIds))])
 }
@@ -233,7 +233,7 @@ async function shallowSyncSubmissionsThread(thread, closedTagIds) {
 }
 
 async function judgeSyncForum(forum, ...judgeIdMaps) {
-	const threads = await getAllThreads(forum);
+	const threads = await getAllThreads(forum, true);
 	const closedTagIds = getTagsFromEmojiCodes(forum, JUDGEMENT_EMOJI_CODES).map(tag => tag.id);
 	await Promise.all(threads.map(thread => pushJudgedFromThread(judgeIdMaps, thread, closedTagIds))); // Pushing asynchronously is safe in JS
 }

@@ -28,7 +28,7 @@ module.exports = {
 		
 		const [waitingTagId, pendingTagId] = getTagsFromEmojiCodes(vetoForum, OPEN_EMOJI_CODES, true).map(tag => tag.id);
 		
-		const threads = await getAllThreads(vetoForum);
+		const threads = await getAllThreads(vetoForum, true);
 		await Promise.all(threads.map(thread => new Promise(async resolve => {
 			if(!thread.appliedTags.some(tagId => tagId === waitingTagId)) { // Pending, open, or closed
 				const videoMessage = await thread.fetchStarterMessage({force: true});
