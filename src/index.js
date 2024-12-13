@@ -11,6 +11,9 @@ const linkRegex = require("./utility/linkRegex");
 const youtubeIdRegex = require("./utility/youtubeIdRegex");
 const TextFormatter = require("./utility/TextFormatter");
 const sendIndefiniteTyping = require("./utility/discord/messages/sendIndefiniteTyping");
+const getAllThreads = require("./utility/discord/threads/getAllThreads");
+const getTagsFromEmojiCodes = require("./utility/discord/threads/getTagsFromEmojiCodes");
+const getArchivedThreads = require("./utility/discord/threads/getArchivedThreads");
 // TODO await deferreplys, as long as await before method break, its fine, alteranativey .catch()?
 const client = new Client({ // TODO fix admin override (doesnt actually re-deny)
 	intents: [ // TODO change all statuses to upper case
@@ -39,39 +42,6 @@ const client = new Client({ // TODO fix admin override (doesnt actually re-deny)
 	registerListeners();
 	await client.login(process.env.TOKEN);
 	await checkChannels();
-
-	// const channel = await client.channels.fetch("1316454740439339010");
-	// console.log(channel.id);
-	// const message = await channel.fetchStarterMessage({force: true});
-	// console.log(message.id);
-	// message.react(process.env.JUDGEMENT_EMOJI_CODES.split(", ")[1]);
-	// const messageLines = message.content.split("\n");
-	// const lineOneWords = messageLines[0].split(" ");
-	// messageLines.splice(0, 1);
-	// lineOneWords[1] = "**Judging"
-	// lineOneWords[2] = "Concluded**"
-	// messageLines[2] = "<@508682299089616904>"
-	// const editedContent = [lineOneWords.join(" "), ...messageLines].join("\n");
-	// message.edit(editedContent);
-	// console.log("Fixed voidscapes https://discord.com/channels/950299679692845087/1288570448883486761")
-
-	// // const { Submission } = require("./mongo/mongoModels").modelData;
-	// // const docs = await Submission.find({status: "VETOED"}).exec();
-	// // await Promise.all(docs.map(doc => new Promise(async resolve => {
-	// // 	const thread = await client.channels.fetch(doc.threadId);
-	// // 	const message = await thread.fetchStarterMessage({force: true});
-	// // 	const messageLines = message.content.split("\n\n");
-	// // 	messageLines.splice(1, 0, "__*Veto Overturn Requests:*__\n**None**");
-	// // 	const editedText = messageLines.join("\n\n");
-
-	// 	const actionRow = new ActionRowBuilder();
-	// 	const {data: overturnButton} = require("./buttons/overturn/overturn");
-	// 	actionRow.addComponents(overturnButton);
-		
-	// 	await message.edit({components: [actionRow]});//{content: editedText, components: [actionRow]});
-	// 	resolve();
-	// })));
-	// console.log("Done");
 })();
 
 function loadCommands() {

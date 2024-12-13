@@ -1,17 +1,17 @@
-module.exports = async (forum) => {	
-	let archive = await forum.threads.fetchArchived({fetchAll: true, limit: 2}); // Initial pool
-	if(archive.threads.size === 0) return [];
+const { Collection } = require("discord.js");
 
-	const archivedThreads = [...archive.threads.values()];
+module.exports = async (forum) => {
+	let archive = await forum.threads.fetchArchived({fetchAll: true, limit: 2}); // Min 2, so limit 2; used as a bassline for the before parameter
+	let threads = archive.threads;
 
-	while((archive = await getNextBatch(forum, archivedThreads)).hasMore === true) {
-		archive.threads.forEach(thread => archivedThreads.push(thread));
+	while(archive.hasMore === true) {
+		archive = await getNextBatch(forum, threads);
+		threads = threads.concat(archive.threads);
 	}
+	return threads;
+};
 
-	return archivedThreads;
-}
-
-async function getNextBatch(forum, archivedThreads) {
-	const lastThreadId = archivedThreads[archivedThreads.length - 1].id;
+async function getNextBatch(forum, lastArchiveThreads) {
+	const lastThreadId = lastArchiveThreads.at(lastArchiveThreads.length - 1).id;
 	return forum.threads.fetchArchived({fetchAll: true, before: lastThreadId});
 }

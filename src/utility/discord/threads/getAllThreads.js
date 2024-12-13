@@ -2,15 +2,14 @@ const getActiveThreads = require("./getActiveThreads");
 const getArchivedThreads = require("./getArchivedThreads");
 
 module.exports = async (targetForum, autoUnarchive = false) => {
-	const activePromise = await getActiveThreads(targetForum);
-	const archivedPromise = await getArchivedThreads(targetForum);
-	const threads = await Promise.all([activePromise, archivedPromise]);
+	const threads = await Promise.all([
+		getActiveThreads(targetForum), 
+		getArchivedThreads(targetForum)
+	]);
 	
 	if(autoUnarchive) {
-		console.log(threads[1].length)
 		await Promise.all(threads[1].map(thread => {
-			console.log(thread.archived);
-			if(thread.archived === true) return thread.setArchived(false).then(() => console.log('set unarchived'));
+			if(thread.archived === true) return thread.setArchived(false);
 		})); // Unarchive all archived threads because important information cannot be accessed when archived
 	}
 
