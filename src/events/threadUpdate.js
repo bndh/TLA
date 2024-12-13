@@ -11,9 +11,9 @@ module.exports = {
 		&& !(oldThread.archived === false && newThread.archived === true)) { // Only care about threads which have just become closed
 			return; 
 		}
-		const closedTagIds = getTagsFromEmojiCodes(newThread.parentId, JUDGEMENT_EMOJI_CODES).map(tag => tag.id);
+		const closedTagIds = getTagsFromEmojiCodes(newThread.parent, JUDGEMENT_EMOJI_CODES).map(tag => tag.id);
 		if(newThread.appliedTags.some(tagId => closedTagIds.includes(tagId))) return; // Only care about open threads
 		
-		await newThread.setArchived(false, "Thread is not yet closed.");
+		await newThread.setArchived(false, "Autounarchive requested.");
 	}
 };

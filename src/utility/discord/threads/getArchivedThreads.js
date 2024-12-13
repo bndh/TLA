@@ -1,16 +1,17 @@
 module.exports = async (forum) => {	
-	const initialThreadContainer = await forum.threads.fetchArchived({fetchAll: true, limit: 2}); // Requires 2 or more but we need to specify archived so we are forced to use this
-	const initialThread = initialThreadContainer.threads.size === 1 ? initialPoll.at(0) : null;
-	if(!initialThread) return [];
+	let archive = await forum.threads.fetchArchived({fetchAll: true, limit: 2}); // Initial pool
+	if(archive.threads.size === 0) return [];
 
-	const archivedThreads = [initialThread];
+	const archivedThreads = [...archive.threads.values()];
 
-	let hasMore = true;
-	while(hasMore === true) {
-		const fetchedThreadsContainer = await forum.threads.fetchArchived({fetchAll: true, before: archivedThreads[archivedThreads.length - 1].id});
-		const fetchedThreads = fetchedThreadsContainer.threads;
-		fetchedThreads.forEach(thread => archivedThreads.push(thread));
+	while((archive = await getNextBatch(forum, archivedThreads)).hasMore === true) {
+		archive.threads.forEach(thread => archivedThreads.push(thread));
 	}
 
 	return archivedThreads;
+}
+
+async function getNextBatch(forum, archivedThreads) {
+	const lastThreadId = archivedThreads[archivedThreads.length - 1].id;
+	return forum.threads.fetchArchived({fetchAll: true, before: lastThreadId});
 }

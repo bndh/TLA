@@ -23,7 +23,7 @@ module.exports = async (client, submissionThreadId) => { // Use ids as it will b
 		).exec()),
 		Submission.enqueue(() => Submission.updateOne({threadId: submissionThreadId}, {$set: {status: decisionTag.name}, $unset: {expirationTime: 1}}).exec())
 	]);
-	await submissionThread.setArchived(true); // Close old threads
+	// await submissionThread.setArchived(true); // Close old threads
 }
 
 async function updateThread(thread, starterMessage) {
