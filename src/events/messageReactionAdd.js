@@ -41,7 +41,8 @@ async function handleSubmissionResponse(messageReaction, submissionThread, judge
 		Judge.enqueue(() => Judge.updateOne({userId: judge.id}, {$push: {counselledSubmissionIds: submissionThread.id}}));
 	}
 	if(messageReaction.emoji.name === JUDGEMENT_EMOJI_CODES[0]) await handleSubmissionApprove(submissionThread, messageReaction.message);
-	else if(messageReaction.emoji.name === JUDGEMENT_EMOJI_CODES[1]) handleSubmissionReject(submissionThread);
+	else if(messageReaction.emoji.name === JUDGEMENT_EMOJI_CODES[1]) await handleSubmissionReject(submissionThread);
+	submissionThread.setArchived(true);
 }
 
 async function handleVetoResponse(messageReaction, submissionThread, judge) {
