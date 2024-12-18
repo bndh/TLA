@@ -96,11 +96,11 @@ module.exports = {
 			if(mode === "forums") await shallowForumSync(vetoForum, submissionsForum);
 			else if(mode === "intake") await shallowIntakeSync(submissionsIntake, submissionsForum, maxIntake);
 			else if(mode === "judges") await shallowJudgeSync(submissionsForum, vetoForum);
-			else await Promise.all([
-					shallowForumSync(vetoForum, submissionsForum),
-					shallowIntakeSync(submissionsIntake, submissionsForum, maxIntake),
-					shallowJudgeSync(submissionsForum, vetoForum)
-			]);
+			else {
+				await shallowForumSync(vetoForum, submissionsForum);
+				await shallowIntakeSync(submissionsIntake, submissionsForum, maxIntake);
+				await shallowJudgeSync(submissionsForum, vetoForum);
+			}
 
 			// Unlock channels
 			await Promise.all([
@@ -160,7 +160,9 @@ async function updateChannelNameAndPermissions(channel, name, permissionField) {
 
 async function shallowForumSync(vetoForum, submissionsForum) {
 	await shallowVetoSync(vetoForum);
+	console.log("Veto Sync Done!");
 	await shallowSubmissionsSync(submissionsForum);
+	console.log("Submissions Sync Done!");
 }
 
 async function shallowIntakeSync(intakeChannel, submissionsForum, maxIntake) {
@@ -168,6 +170,7 @@ async function shallowIntakeSync(intakeChannel, submissionsForum, maxIntake) {
 	const messages = await fetchMessages(intakeChannel, maxIntake);
 
 	for(const message of messages) { // Must do synchronously to avoid duplicate threads
+		console.log(`Syncing Intake ${message.id}...`);
 		const videoLinks = getVideosFromMessage(message);
 		for(const videoLink of videoLinks) {
 			if(await submissionLinkExists(videoLink)) continue;
@@ -175,6 +178,7 @@ async function shallowIntakeSync(intakeChannel, submissionsForum, maxIntake) {
 			await handleNewThread(submissionsForum, waitingTagId, videoLink); // Creates the thread and updates Submissions
 		}
 	}
+	console.log("Intake Sync Done!");
 }
 
 async function shallowJudgeSync(submissionsForum, vetoForum) {
@@ -185,18 +189,21 @@ async function shallowJudgeSync(submissionsForum, vetoForum) {
 		judgeSyncForum(submissionsForum, judgeIdMaps[2]), // Pushing asynchronously is safe in JS so this works fine
 		judgeSyncForum(vetoForum, ...judgeIdMaps)
 	]);
-	
-	return Promise.all(judgeIdMaps.map(judgeIdMap => syncJudgeDocsFromMap(judgeIdMap)));
+
+	await Promise.all(judgeIdMaps.map(judgeIdMap => syncJudgeDocsFromMap(judgeIdMap)));
+	console.log("Judge Sync Done!");
 }
 
 async function shallowVetoSync(vetoForum) {
 	const threads = await getAllThreads(vetoForum, true);
+	console.log("Fetched all Veto Threads!");
 	const specialTags = getTagsFromEmojiCodes(vetoForum, [...JUDGEMENT_EMOJI_CODES, OPEN_EMOJI_CODES[1]], true).map(tag => tag.id);
 	return Promise.all([threads.map(thread => shallowSyncVetoThread(thread, ...specialTags))]);
 }
 
 const handleVetoPending = require("../../utility/discord/submissionsVeto/handleVetoPending"); // Circular dependency
 async function shallowSyncVetoThread(thread, approvedTagId, deniedTagId, pendingTagId) {
+	console.log(`Syncing Veto ${thread.id}...`);
 	if(thread.appliedTags.some(tagId => tagId === approvedTagId || tagId === deniedTagId)) return;
 
 	const videoMessage = await thread.fetchStarterMessage({force: true});
@@ -215,11 +222,13 @@ async function shallowSyncVetoThread(thread, approvedTagId, deniedTagId, pending
 
 async function shallowSubmissionsSync(submissionsForum) {
 	const threads = await getAllThreads(submissionsForum, true);
+	console.log("Fetched all Veto Threads!");
 	const closedTagIds = getTagsFromEmojiCodes(submissionsForum, JUDGEMENT_EMOJI_CODES).map(tag => tag.id);
 	return Promise.all([threads.map(thread => shallowSyncSubmissionsThread(thread, closedTagIds))])
 }
 
 async function shallowSyncSubmissionsThread(thread, closedTagIds) {
+	console.log(`Syncing Submission ${thread.id}...`);
 	if(thread.appliedTags.some(tagId => closedTagIds.includes(tagId))) return;
 	
 	const videoMessage = await thread.fetchStarterMessage({force: true});
@@ -239,6 +248,7 @@ async function judgeSyncForum(forum, ...judgeIdMaps) {
 }
 
 async function pushJudgedFromThread(judgeIdMaps, thread, closedTagIds) {
+	console.log(`Judge Syncing ${thread.id}...`);
 	const videoMessage = await thread.fetchStarterMessage({force: true});
 
 	JUDGEMENT_EMOJI_CODES.forEach(emojiCode => { if(videoMessage.reactions.resolve(emojiCode) === null) { console.log(thread.id) }});
