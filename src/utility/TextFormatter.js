@@ -104,6 +104,7 @@ class TextFormatter {
 
 	static capitaliseText(text) {
 		let capitalisedText = "";
+		text = text.toLowerCase();
 
 		const matches = text.matchAll(/ ([a-z])|(^[a-z])/gd); // Matches start of the string beginning with a-z or a-z after a space. d flag provides index information for capturing groups
 		
