@@ -13,10 +13,13 @@ const JUDGEMENT_EMOJI_CODES = process.env.JUDGEMENT_EMOJI_CODES.split(", ");
 module.exports = async (client, submissionThreadId) => { // Use ids as it will be a long time before we run this, at which point we will need to fetch for accuracy
 	const submissionThread = await client.channels.fetch(submissionThreadId);
 	const submissionMessage = await submissionThread.fetchStarterMessage({force: true}); // Force because reaction cache may be incorrect otherwise
-
+	
+	const counts = tallyJudgementReactions(submissionMessage.reactions); // count -> emojiCode
+	const judgementResult = counts[0][1];
+	const decisionTag = getTagByEmojiCode(submissionThread.parent, judgementResult);
 	await Promise.all([
-		updateThread(submissionThread, submissionMessage),
-		updateMessage(submissionMessage),
+		submissionThread.setAppliedTags([decisionTag.id]),
+		updateMessage(submissionMessage, judgementResult),
 		Judge.enqueue(() => Judge.updateMany(
 			{counselledSubmissionIds: submissionThreadId},
 			{$pull: {counselledSubmissionIds: submissionThreadId}, $inc: {"totalSubmissionsClosed": 1}}
@@ -26,19 +29,12 @@ module.exports = async (client, submissionThreadId) => { // Use ids as it will b
 	await submissionThread.setArchived(true); // Close old threads
 }
 
-async function updateThread(thread, starterMessage) {
-	const counts = tallyJudgementReactions(starterMessage.reactions); // count -> emojiCode
-	const decisionTag = getTagByEmojiCode(thread.parent, counts[0][1]);
-	
-	await thread.setAppliedTags([decisionTag.id]);
-}
-
-async function updateMessage(starterMessage) {
+async function updateMessage(starterMessage, judgementResult) {
 	let messageEditOptions = {};
 
 	const date = new Date();
 	let editedMessageContent = `🥳 **Judging Concluded** on ${time(date, TimestampStyles.LongDateTime)}!`;
-	if(counts[0][1] === JUDGEMENT_EMOJI_CODES[1]) { // Veto win
+	if(judgementResult === JUDGEMENT_EMOJI_CODES[1]) { // Veto win
 		editedMessageContent += "\n\n__*Veto Overturn Requests:*__\n**None**";
 
 		const actionRow = new ActionRowBuilder();
