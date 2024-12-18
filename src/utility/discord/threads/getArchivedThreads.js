@@ -12,6 +12,7 @@ module.exports = async (forum) => {
 };
 
 async function getNextBatch(forum, lastArchiveThreads) {
-	const lastThreadId = lastArchiveThreads.at(lastArchiveThreads.length - 1).id;
-	return forum.threads.fetchArchived({fetchAll: true, before: lastThreadId});
+	const lastThreadId = lastArchiveThreads.at(lastArchiveThreads.size - 1).id;
+	const threadArchive = await forum.threads.fetchArchived({fetchAll: true, before: lastThreadId});
+	return threadArchive;
 }
