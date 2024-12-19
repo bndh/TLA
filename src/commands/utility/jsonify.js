@@ -81,18 +81,11 @@ module.exports = {
 		})));
 
 		const jsonData = JSON.stringify(submissionInfos);
-		
-		const filepath = path.join(__dirname, 'jsonFiles', `export-${interaction.createdTimestamp}.json`);
-		await fsPromises.writeFile(filepath, jsonData);
 
-		const jsonAttachment = new AttachmentBuilder()
-			.setFile(filepath)
+		const jsonAttachment = new AttachmentBuilder(Buffer.from(JSON.stringify(jsonData)))
 			.setName(`Submissions@${interaction.createdTimestamp}.json`)
 			.setDescription("A json-converted version of the submission database.");
 		await interaction.editReply({files: [jsonAttachment]});
-
-		await fsPromises.unlink(filepath); // Delete
-		console.log("Done")
 	}
 }
 
