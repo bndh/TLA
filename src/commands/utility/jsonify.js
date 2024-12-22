@@ -82,7 +82,7 @@ module.exports = {
 
 		const jsonData = JSON.stringify(submissionInfos);
 
-		const jsonAttachment = new AttachmentBuilder(Buffer.from(JSON.stringify(jsonData)))
+		const jsonAttachment = new AttachmentBuilder(Buffer.from(jsonData))
 			.setName(`Submissions@${interaction.createdTimestamp}.json`)
 			.setDescription("A json-converted version of the submission database.");
 		await interaction.editReply({files: [jsonAttachment]});
