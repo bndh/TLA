@@ -12,11 +12,14 @@ const JUDGEMENT_EMOJI_CODES = process.env.JUDGEMENT_EMOJI_CODES.split(", ");
 
 module.exports = async (client, submissionThreadId) => { // Use ids as it will be a long time before we run this, at which point we will need to fetch for accuracy
 	const submissionThread = await client.channels.fetch(submissionThreadId);
+	if(submissionThread.archived) await submissionThread.setArchived(false); // Can't edit content of old threads
+
 	const submissionMessage = await submissionThread.fetchStarterMessage({force: true}); // Force because reaction cache may be incorrect otherwise
 	
 	const counts = tallyJudgementReactions(submissionMessage.reactions); // count -> emojiCode
 	const judgementResult = counts[0][1];
 	const decisionTag = getTagByEmojiCode(submissionThread.parent, judgementResult);
+
 	await Promise.all([
 		submissionThread.setAppliedTags([decisionTag.id]),
 		updateMessage(submissionMessage, judgementResult),

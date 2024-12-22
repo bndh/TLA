@@ -210,7 +210,6 @@ async function shallowSyncVetoThread(thread, approvedTagId, deniedTagId, pending
 
 	if(thread.appliedTags.includes(pendingTagId)) {
 		const doc = await Submission.enqueue(() => Submission.findOne({threadId: thread.id}).exec());
-		console.log(`${doc} for ${thread.id}`)
 		if(doc.expirationTime <= Date.now()) return handleVetoJudgement(thread.client, thread.id);
 	} else { // Thread is not closed or pending
 		const [upvotes, downvotes] = tallyReactions(videoMessage, JUDGEMENT_EMOJI_CODES);
