@@ -8,6 +8,11 @@ module.exports = {
 		.setName("random")
 		.setDescription("Fetch a random submission which you have not yet judged.")
 		.addBooleanOption(optionBuilder => optionBuilder
+			.setName("true-random")
+			.setDescription("Whether the returned thread will be picked truly randomly. (Default: false).")
+			.setRequired(false)
+		)
+		.addBooleanOption(optionBuilder => optionBuilder
 			.setName("preview")
 			.setDescription("Whether the link to the thread should be included in the response. (Default: true).")
 			.setRequired(false)
@@ -15,6 +20,7 @@ module.exports = {
 	async execute(interaction) {
 		await interaction.deferReply({ephemeral: true});
 
+		const trueRandom = interaction.options.getBoolean("true-random", false) ?? false;
 		const preview = interaction.options.getBoolean("preview", false) ?? true;
 
 		const judgeEntry = await Judge.enqueue(() => 
@@ -32,12 +38,11 @@ module.exports = {
 		if(judgeEntry.judgeType === "admin") permissibleStatuses = ["AWAITING VETO", "AWAITING DECISION", "PENDING APPROVAL"];
 		else permissibleStatuses = ["AWAITING VETO", "PENDING APPROVAL"]; // Nominator, assessor
 		
-		const permissibleSubmissions = await Submission.enqueue(() => // While we could just return the first result, we pick one randomly so that if a judge was stuck with a submission, they should be able to have the command generate a different one in a few tries 
-			Submission.aggregate([
-				{$match: {threadId: {$nin: counselledSubmissionIds}, status: {$in: permissibleStatuses}}},
-				{$sample: {size: 1}} // Picks random submission
-			]).exec()
-		);
+		const aggregationPipeline = [{$match: {threadId: {$nin: counselledSubmissionIds}, status: {$in: permissibleStatuses}}}];
+		aggregationPipeline.push(trueRandom ? {$sample: {size: 1}} : {$sort: {threadId: 1}});
+	
+		const permissibleSubmissions = await Submission.enqueue(() => Submission.aggregate(aggregationPipeline).exec());
+
 		if(permissibleSubmissions.length === 0) {
 			await interaction.editReply({embeds: [EmbedBuilder.generateSuccessEmbed("You've judged **every submission!**\nKeep up the good work!")]});
 			console.info(`Command random used by ${interaction.user.id} in ${interaction.channelId}, yielding no judged submission. (All were already judged).`);

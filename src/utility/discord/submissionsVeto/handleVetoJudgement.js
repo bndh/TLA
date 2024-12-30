@@ -16,7 +16,7 @@ module.exports = async (client, submissionThreadId) => { // Use ids as it will b
 
 	const submissionMessage = await submissionThread.fetchStarterMessage({force: true}); // Force because reaction cache may be incorrect otherwise
 	
-	const counts = tallyJudgementReactions(submissionMessage.reactions); // count -> emojiCode
+	const counts = tallyJudgementReactions(submissionMessage.reactions); // [[count, emojiCode]]
 	const judgementResult = counts[0][1];
 	const decisionTag = getTagByEmojiCode(submissionThread.parent, judgementResult);
 

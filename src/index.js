@@ -7,13 +7,7 @@ const mongoModels = require("./mongo/mongoModels");
 
 const getAllExports = require("./utility/files/getAllExports"); // TODO infos disappearing
 const pushEmbedFunctions = require("./utility/discord/messages/pushEmbedFunctions"); // TODO lock closed posts
-const linkRegex = require("./utility/linkRegex");
-const youtubeIdRegex = require("./utility/youtubeIdRegex");
-const TextFormatter = require("./utility/TextFormatter");
-const sendIndefiniteTyping = require("./utility/discord/messages/sendIndefiniteTyping");
-const getAllThreads = require("./utility/discord/threads/getAllThreads");
-const getTagsFromEmojiCodes = require("./utility/discord/threads/getTagsFromEmojiCodes");
-const getArchivedThreads = require("./utility/discord/threads/getArchivedThreads");
+
 // TODO await deferreplys, as long as await before method break, its fine, alteranativey .catch()?
 const client = new Client({ // TODO fix admin override (doesnt actually re-deny)
 	intents: [ // TODO change all statuses to upper case
