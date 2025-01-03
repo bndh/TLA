@@ -185,10 +185,8 @@ async function shallowJudgeSync(submissionsForum, vetoForum) {
 	const judgeGroups = await Promise.all(["nominator", "assessor", "admin"].map(judgeType => Judge.enqueue(() => Judge.find({judgeType: {$in: judgeType}}).exec())));
 	const judgeIdMaps = judgeGroups.map(judgeGroup => new Map(judgeGroup.map(judge => [judge.userId, {counselled: [], closed: 0}])))
 
-	await Promise.all([
-		judgeSyncForum(submissionsForum, judgeIdMaps[2]), // Pushing asynchronously is safe in JS so this works fine
-		judgeSyncForum(vetoForum, ...judgeIdMaps)
-	]);
+	await judgeSyncForum(submissionsForum, judgeIdMaps[2]); // Pushing asynchronously is safe in JS so this works fine
+	await judgeSyncForum(vetoForum, ...judgeIdMaps); // Done in sequence to reduce load on the program
 
 	await Promise.all(judgeIdMaps.map(judgeIdMap => syncJudgeDocsFromMap(judgeIdMap)));
 	console.log("Judge Sync Done!");
